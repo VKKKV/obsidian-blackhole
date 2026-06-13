@@ -198,7 +198,18 @@ export class BlackHoleRenderer {
     if (!this.running || !this.gl || !this.program) return;
     this.animId = requestAnimationFrame(this.loop);
 
-    const gl = this.gl;
+    try {
+      this.renderFrame(now);
+    } catch (e) {
+      // A throw here would otherwise fire as an uncaught error every frame.
+      // Log it once and stop the loop rather than spam the console.
+      console.error('BlackHole: render loop error — stopping renderer.', e);
+      this.stop();
+    }
+  };
+
+  private renderFrame(now: number) {
+    const gl = this.gl!;
     const dt = Math.min((now - this.prevTime) / 1000, 0.1);
     this.prevTime = now;
     this.frameCount++;
@@ -228,5 +239,5 @@ export class BlackHoleRenderer {
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
-  };
+  }
 }

@@ -1469,36 +1469,12 @@ var BlackHoleRenderer = class {
       if (!this.running || !this.gl || !this.program)
         return;
       this.animId = requestAnimationFrame(this.loop);
-      const gl = this.gl;
-      const dt = Math.min((now - this.prevTime) / 1e3, 0.1);
-      this.prevTime = now;
-      this.frameCount++;
-      gl.useProgram(this.program);
-      gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);
-      gl.uniform1f(this.uTime, now / 1e3);
-      gl.uniform1f(this.uTimeDelta, dt);
-      gl.uniform1i(this.uFrame, this.frameCount);
-      gl.uniform1f(this.uLastActivity, this.lastActivity);
-      const d = /* @__PURE__ */ new Date();
-      gl.uniform4f(
-        this.uDate,
-        d.getFullYear(),
-        d.getMonth() + 1,
-        d.getDate(),
-        d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()
-      );
-      if (this.lastTokenLevel !== this.tokenLevel) {
-        this.prevTokenLevel = this.lastTokenLevel;
-        this.lastTokenLevel = this.tokenLevel;
-        this.lastTokenChange = now / 1e3;
+      try {
+        this.renderFrame(now);
+      } catch (e) {
+        console.error("BlackHole: render loop error \u2014 stopping renderer.", e);
+        this.stop();
       }
-      gl.uniform1f(this.uTokenLevel, this.tokenLevel);
-      gl.uniform1f(this.uTokenPrev, this.prevTokenLevel);
-      gl.uniform1f(this.uTokenChangeTime, this.lastTokenChange);
-      gl.uniform1i(this.uSizeMode, this.sizeMode);
-      gl.bindVertexArray(this.vao);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      gl.bindVertexArray(null);
     };
     this.canvas = canvas;
     this.params = { ...params };
@@ -1654,17 +1630,51 @@ var BlackHoleRenderer = class {
     }
     return shader;
   }
+  renderFrame(now) {
+    const gl = this.gl;
+    const dt = Math.min((now - this.prevTime) / 1e3, 0.1);
+    this.prevTime = now;
+    this.frameCount++;
+    gl.useProgram(this.program);
+    gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);
+    gl.uniform1f(this.uTime, now / 1e3);
+    gl.uniform1f(this.uTimeDelta, dt);
+    gl.uniform1i(this.uFrame, this.frameCount);
+    gl.uniform1f(this.uLastActivity, this.lastActivity);
+    const d = /* @__PURE__ */ new Date();
+    gl.uniform4f(
+      this.uDate,
+      d.getFullYear(),
+      d.getMonth() + 1,
+      d.getDate(),
+      d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()
+    );
+    if (this.lastTokenLevel !== this.tokenLevel) {
+      this.prevTokenLevel = this.lastTokenLevel;
+      this.lastTokenLevel = this.tokenLevel;
+      this.lastTokenChange = now / 1e3;
+    }
+    gl.uniform1f(this.uTokenLevel, this.tokenLevel);
+    gl.uniform1f(this.uTokenPrev, this.prevTokenLevel);
+    gl.uniform1f(this.uTokenChangeTime, this.lastTokenChange);
+    gl.uniform1i(this.uSizeMode, this.sizeMode);
+    gl.bindVertexArray(this.vao);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindVertexArray(null);
+  }
 };
 
 // src/capture.ts
 var domToImage = __toESM(require_dom_to_image_more_min());
 var CAPTURE_INTERVAL = 350;
 var CAPTURE_SCALE = 0.5;
+var MAX_CONSECUTIVE_FAILURES = 5;
 var WorkspaceCapture = class {
   constructor() {
     this.lastCapture = 0;
     this.el = null;
     this.failed = false;
+    this.failures = 0;
     /** The most recent successfully captured canvas. */
     this.latestCanvas = null;
     /** Time of the latest successful capture (monotonic). */
@@ -1676,7 +1686,8 @@ var WorkspaceCapture = class {
   /**
    * Trigger an async capture. Returns `true` if a capture was initiated.
    * Resolves by updating `latestCanvas` when dom-to-image finishes.
-   * Rate-limited internally.
+   * Rate-limited internally. After repeated failures it disables itself so a
+   * persistently broken DOM/CSS can't throw on every tick.
    */
   capture(now) {
     if (this.failed || !this.el)
@@ -1689,25 +1700,55 @@ var WorkspaceCapture = class {
     const h = el.offsetHeight;
     if (w === 0 || h === 0)
       return false;
-    domToImage.toCanvas(el, {
-      width: Math.round(w * CAPTURE_SCALE),
-      height: Math.round(h * CAPTURE_SCALE),
-      scale: CAPTURE_SCALE,
-      filter: (n) => {
-        if (n instanceof HTMLElement && n.classList.contains("blackhole-canvas"))
-          return false;
-        return true;
-      }
-    }).then((canvas) => {
-      this.latestCanvas = canvas;
-      this.latestCaptureTime = performance.now();
-    }).catch(() => {
-    });
+    try {
+      domToImage.toCanvas(el, {
+        width: Math.round(w * CAPTURE_SCALE),
+        height: Math.round(h * CAPTURE_SCALE),
+        scale: CAPTURE_SCALE,
+        // CRITICAL: do not let dom-to-image fetch fonts or images. In Obsidian
+        // those resolve to `app://` URLs served by the *main process* protocol
+        // handler, which decodeURIComponent()s the path and throws an uncaught
+        // "URI malformed" — crashing the whole app. A renderer try/catch can't
+        // catch a main-process throw, so we must avoid issuing the request.
+        // The lensed texture only needs the workspace text/layout, not media.
+        disableEmbedFonts: true,
+        disableInlineImages: true,
+        // reading cross-origin stylesheet cssRules can also throw synchronously
+        ignoreCSSRuleErrors: true,
+        // belt-and-suspenders: block any remaining non-data URL from being fetched
+        filterUrls: (url) => url.startsWith("data:"),
+        filter: (n) => {
+          if (n instanceof HTMLElement && n.classList.contains("blackhole-canvas"))
+            return false;
+          return true;
+        }
+      }).then((canvas) => {
+        this.latestCanvas = canvas;
+        this.latestCaptureTime = performance.now();
+        this.failures = 0;
+      }).catch((e) => {
+        this.noteFailure(e);
+      });
+    } catch (e) {
+      this.noteFailure(e);
+      return false;
+    }
     return true;
   }
-  /** Reset failure state. */
+  noteFailure(e) {
+    this.failures++;
+    if (this.failures >= MAX_CONSECUTIVE_FAILURES) {
+      this.failed = true;
+      console.error(
+        `BlackHole: workspace capture failed ${this.failures}\xD7 \u2014 disabling capture; the shader will render disk/starfield only.`,
+        e
+      );
+    }
+  }
+  /** Reset failure state (e.g. after a mode change). */
   reset() {
     this.failed = false;
+    this.failures = 0;
   }
   /**
    * Try to take a synchronous capture (won't reflect latest DOM changes
@@ -1733,7 +1774,8 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     this.lastActivity = 0;
     this.captureIntervalId = 0;
     this.metricIntervalId = 0;
-    this.domObserver = null;
+    this.leafChangeRef = null;
+    this.layoutChangeRef = null;
     this.recompileSoon = (0, import_obsidian2.debounce)(() => {
       if (this.renderer)
         this.renderer.recompile(this.toShaderParams());
@@ -1755,8 +1797,10 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
         this.stop();
       new import_obsidian2.Notice(`Black hole ${this.enabled ? "ON" : "OFF"}`);
     });
-    if (this.enabled)
-      this.start();
+    this.app.workspace.onLayoutReady(() => {
+      if (this.enabled)
+        this.start();
+    });
   }
   onunload() {
     this.stop();
@@ -1764,6 +1808,16 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
   start() {
     if (this.renderer)
       return;
+    try {
+      this.startInternal();
+    } catch (e) {
+      console.error("BlackHole: failed to start.", e);
+      new import_obsidian2.Notice("Black Hole failed to start \u2014 see console for details.");
+      this.stop();
+      this.enabled = false;
+    }
+  }
+  startInternal() {
     const canvas = document.createElement("canvas");
     canvas.className = "blackhole-canvas";
     this.canvas = canvas;
@@ -1795,24 +1849,35 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     document.addEventListener("touchstart", this.activityHandler);
     document.addEventListener("wheel", this.activityHandler, { passive: true });
     this.captureIntervalId = window.setInterval(() => {
-      if (!this.renderer || !this.capture)
-        return;
-      this.capture.capture(performance.now());
-      const cap = this.capture.latestCanvas;
-      if (cap) {
-        this.renderer.updateTexture(cap);
+      try {
+        if (!this.renderer || !this.capture)
+          return;
+        this.capture.capture(performance.now());
+        const cap = this.capture.latestCanvas;
+        if (cap)
+          this.renderer.updateTexture(cap);
+      } catch (e) {
+        console.error("BlackHole: capture tick failed.", e);
       }
     }, 300);
     this.metricIntervalId = window.setInterval(() => {
-      if (!this.renderer || this.settings.sizeMode !== 1)
-        return;
-      this.renderer.tokenLevel = this.computeTokenLevel();
+      try {
+        if (!this.renderer || this.settings.sizeMode !== 1)
+          return;
+        this.renderer.tokenLevel = this.computeTokenLevel();
+      } catch (e) {
+        console.error("BlackHole: metric tick failed.", e);
+      }
     }, 500);
-    this.domObserver = new MutationObserver(() => {
-      if (this.capture)
-        this.capture.setElement(this.findCaptureTarget());
-    });
-    this.domObserver.observe(document.body, { childList: true, subtree: true });
+    const refresh = () => {
+      try {
+        this.capture?.setElement(this.findCaptureTarget());
+      } catch (e) {
+        console.error("BlackHole: capture-target refresh failed.", e);
+      }
+    };
+    this.leafChangeRef = this.app.workspace.on("active-leaf-change", refresh);
+    this.layoutChangeRef = this.app.workspace.on("layout-change", refresh);
   }
   stop() {
     if (this.renderer) {
@@ -1832,8 +1897,14 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     document.removeEventListener("mousedown", this.activityHandler);
     document.removeEventListener("touchstart", this.activityHandler);
     document.removeEventListener("wheel", this.activityHandler);
-    this.domObserver?.disconnect();
-    this.domObserver = null;
+    if (this.leafChangeRef) {
+      this.app.workspace.offref(this.leafChangeRef);
+      this.leafChangeRef = null;
+    }
+    if (this.layoutChangeRef) {
+      this.app.workspace.offref(this.layoutChangeRef);
+      this.layoutChangeRef = null;
+    }
   }
   onModeChange() {
     if (!this.renderer)
@@ -1898,41 +1969,43 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
   computeTokenLevel() {
     if (this.settings.sizeMode !== 1)
       return -1;
-    switch (this.settings.tokenMetric) {
-      case "word-count": {
-        const mdView = this.app.workspace.getActiveViewOfType(import_obsidian2.MarkdownView);
-        if (!mdView)
+    try {
+      switch (this.settings.tokenMetric) {
+        case "word-count": {
+          const mdView = this.app.workspace.getActiveViewOfType(import_obsidian2.MarkdownView);
+          if (!mdView)
+            return -1;
+          const text = mdView.editor?.getValue() ?? "";
+          const words = text.split(/\s+/).filter((w) => w.length > 0).length;
+          return Math.min(words / this.settings.maxWordCount, 1);
+        }
+        case "global-word-count": {
+          const files = this.app.vault.getMarkdownFiles();
+          return Math.min(files.length * 500 / this.settings.maxWordCount, 1);
+        }
+        case "file-count": {
+          const files = this.app.vault.getMarkdownFiles();
+          return Math.min(files.length / 1e3, 1);
+        }
+        case "tab-count": {
+          const leaves = this.app.workspace.getLeavesOfType("markdown");
+          return Math.min(leaves.length / 20, 1);
+        }
+        default:
           return -1;
-        const text = mdView.editor?.getValue() ?? "";
-        const words = text.split(/\s+/).filter((w) => w.length > 0).length;
-        return Math.min(words / this.settings.maxWordCount, 1);
       }
-      case "global-word-count": {
-        const files = this.app.vault.getMarkdownFiles();
-        return Math.min(files.length * 500 / this.settings.maxWordCount, 1);
-      }
-      case "file-count": {
-        const files = this.app.vault.getMarkdownFiles();
-        return Math.min(files.length / 1e3, 1);
-      }
-      case "tab-count": {
-        const leaves = this.app.workspace.getLeavesOfType("markdown");
-        return Math.min(leaves.length / 20, 1);
-      }
-      default:
-        return -1;
+    } catch (e) {
+      console.error("BlackHole: token-metric computation failed.", e);
+      return -1;
     }
   }
   findCaptureTarget() {
-    const activeLeaf = this.app.workspace.activeLeaf;
-    if (activeLeaf) {
-      const container = activeLeaf.containerEl;
-      if (container) {
-        const vc = container.querySelector(".view-content");
-        return vc ?? container;
-      }
-    }
-    return document.querySelector(".view-content") ?? null;
+    const active = document.querySelector(
+      ".workspace-leaf.mod-active .view-content"
+    );
+    if (active)
+      return active;
+    return document.querySelector(".view-content");
   }
 };
 /*! Bundled license information:

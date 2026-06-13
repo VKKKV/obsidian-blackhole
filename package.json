@@ -8,8 +8,8 @@
     "dev": "node esbuild.config.js"
   },
   "keywords": [],
-  "author": "",
-  "license": "MIT",
+  "author": "Kita",
+  "license": "GPL-3.0-or-later",
   "devDependencies": {
     "@types/node": "^20.0.0",
     "builtin-modules": "^3.3.0",

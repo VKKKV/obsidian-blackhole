@@ -1,6 +1,6 @@
 # Obsidian Black Hole — Handoff
 
-> 给下一个 AI 的完整上下文。项目已构建（build 通过），但未在真实 Obsidian 中运行过，**一定有 bug**。
+> 给下一个 AI 的完整上下文。项目已构建（build 通过）。已做过一轮 bug 修复 + 错误处理加固，但仍需在真实 Obsidian 中充分验证。
 
 ## 项目目标
 
@@ -24,10 +24,28 @@ styles.css     — canvas overlay 定位（position: absolute, pointer-events: n
 
 ## 当前状态
 
-- `npm run build` 通过，产出 `main.js` 82KB
-- 所有 TS 源文件合计 ~1200 行
-- **未在真实 Obsidian 中运行过** — 代码是写的，不是调试出来的
-- 无 git 仓库（`git init` 都没跑）
+- `npm run build` 通过，`npx tsc --noEmit` 干净（仅剩 tsconfig `baseUrl` 弃用警告）
+- 所有 TS 源文件合计 ~1300 行
+- 已有 git 仓库 + GitHub remote (`VKKKV/obsidian-blackhole`)
+- **已修一轮 bug + 错误处理加固**（见下方 ✅ 标记），但真实 Obsidian 运行验证仍不充分
+
+## 已修复（本轮）
+
+- ✅ **Token glide**: shader `main()` 现调用 `glidedToken(uTokenLevel, uTokenPrev, uTokenChangeTime)`；renderer 用私有 `lastTokenLevel` 检测变化，把变化前的值作为 glide 起点，并上传两个新 uniform。
+- ✅ **STAR_GAIN → L.star**: 两处星场亮度改回 `L.star`，demo 模式星场重新跟随预设。
+- ✅ **首次空白帧**: `start()` 立即触发一次 capture，不再等 ~350ms。
+- ✅ **ribbon icon**: `'goal'` → `'circle-dot'`（确定存在的 Lucide 图标）。
+- ✅ **debounced recompile**: slider 拖动改用 `onParamsChange()`（`debounce(…, 200)`）；mode 切换不再 recompile（`uSizeMode` 是 uniform）；text 输入也会触发 recompile。
+- ✅ **错误处理加固**：
+  - RAF loop 包 try/catch，出错只 log 一次并 `stop()`，不再每帧抛 uncaught。
+  - `start()` 包 try/catch，失败时清理 + Notice + `enabled=false`。
+  - 首次 start 延迟到 `workspace.onLayoutReady()`，避免布局未就绪时查询/截取。
+  - capture/metric 两个 interval 回调各自 try/catch。
+  - `computeTokenLevel()` 整体 try/catch。
+  - capture：`domToImage.toCanvas` 同步调用包 try/catch；连续失败 5 次后自动停用（`failed=true`）。
+- ✅ **MutationObserver → workspace events**: 原先监听整个 `document.body` subtree（每次按键都触发），改为 `active-leaf-change` + `layout-change`，`stop()` 里用 `offref` 清理。
+- ✅ **findCaptureTarget 去私有 API**: 不再用 `(activeLeaf as any).containerEl`，改 DOM 查询 `.workspace-leaf.mod-active .view-content`。
+- ✅ **license 一致性**: `package.json` 由 `MIT` 改为 `GPL-3.0-or-later`（与 LICENSE / README 一致）。
 
 ## Shader 说明
 
@@ -54,31 +72,27 @@ styles.css     — canvas overlay 定位（position: absolute, pointer-events: n
 
 ## 已知 Bug / 待修项
 
-### 1. 致命级
+### 1. 致命级 — 均已修复 ✅
 
-- **Token glide 未启用**: shader 里定义了 `glidedToken()` 函数，但 `main()` 中直接用了 `uTokenLevel` uniform，没用 glide 插值。Token 模式下数值跳变时会瞬移。修复方法：传两个 uniform (`uTokenPrev`, `uTokenChangeTime`)，在 shader 里调用 `glidedToken()`。
+- ✅ Token glide（见上方「已修复」）
+- ✅ capture 首次帧空白
+- ✅ `STAR_GAIN` → `L.star`
 
-- **capture 首次帧空白**: `capture()` 是异步的（dom-to-image promise），插件启动后 `latestCanvas` 为 null，前几百毫秒 shader 拿空白纹理渲染。解决方法：启动时立即触发一次 capture，或用黑色 canvas 作为 fallback（已有 `blankCanvas` 但没正确衔接）。
+### 2. 重要 — 多数已修复
 
-- **shader 里 L.star 改成了 STAR_GAIN**: 在 `makeFS()` 生成的主循环末尾，星场亮度用了 `STAR_GAIN` 而不是 `L.star`（`L.star` 在 demo 模式下是 crossfade 后的值）。这导致 demo 模式星场不跟随预设。定位在 shader 最后的 `stars(dd) * STAR_GAIN` 两处，应改回 `L.star`。
+- ✅ **`activeLeaf.containerEl` private API**: `findCaptureTarget()` 已改用 DOM 查询 `.workspace-leaf.mod-active .view-content`，不再依赖私有字段。
+- ✅ **ribbon icon 'goal'**: 改为 `'circle-dot'`。
+- ✅ **shader recompile 阻塞**: 已 debounce（`onParamsChange` 200ms），mode 切换不再 recompile。
 
-### 2. 重要
+### 3. 可优化（仍待处理）
 
-- **`activeLeaf.containerEl` 是 private API**: Obsidian 的 `WorkspaceLeaf` 没有暴露 `containerEl` 的 public 类型，`findCaptureTarget()` 用了 `(activeLeaf as any).containerEl`。可能在未来版本 break。更稳的方法：通过 `workspace.rootSplit.children` 遍历找 `view-content`。
+- **dom-to-image 性能**: 仍每隔 ~350ms 截取整个 workspace leaf（0.5x 分辨率），CPU 开销较大。下一步可考虑：只有当 hole visible 且 token level > 0.1 时才 capture；或降到 1fps。（连续失败 5 次会自动停用，但正常路径未做条件触发。）
 
-- **ribbon icon 'goal' 可能不存在**: Obsidian 的 ribbon icon 基于 Lucide。`'goal'` 不是标准 Lucide 图标名。如果 Obsidian 版本不支持，会静默不显示。改成 `'circle-dot'` 或 `'target'` 等已知存在的图标。
+- **canvas z-index 冲突**: `z-index: 10` 在 Obsidian 复杂 stacking context 里可能偏低（modals = 100+）。`pointer-events: none` 保证点击穿透，所以暂未改动；若发现被遮挡可设 `var(--layer-cover)` 或 ≥100。
 
-- **shader recompile 阻塞**: settings 里每个 slider 拖动都触发 `onModeChange()` → `renderer.recompile()`，导致每帧重编译一次 shader。拖动过程中可能卡顿。修复：debounce（比如只保存不重编译，等用户关闭 settings tab 时再 recompile）。
+- **World-count polling 500ms**: 大文件的 `editor.getValue()` + `split` 每 500ms 执行可能卡顿。考虑缓存 editor content hash，只有变化时才重新计算。（已包 try/catch，不会再因此抛 uncaught。）
 
-### 3. 可优化
-
-- **dom-to-image 性能**: 每隔 300ms 截取整个 workspace leaf（0.5x 分辨率），CPU 开销较大。考虑：只有当 hole visible 且 token level > 0.1 时才 capture；或降低到 1fps。
-
-- **canvas z-index 冲突**: `z-index: 10` 在 Obsidian 复杂的 stacking context 里可能偏低（modals = 100+）。应设为 `var(--layer-cover)` 或至少 100。但 `pointer-events: none` 保证了点击穿透。
-
-- **无 git 仓库**: 不方便 diff 和回退。建议 `git init && git add . && git commit -m "init: obsidian blackhole plugin scaffold"`。
-
-- **World-count polling 500ms**: 大文件的 `editor.getValue()` + `split` 每 500ms 执行可能引起卡顿。考虑缓存 editor content hash，只有变化时才重新计算。
+- **`enabled` 状态未持久化**: ribbon 关闭后重载插件会重新开启（`enabled` 不在 settings 里）。可加入 settings 持久化。
 
 ### 4. 缺失功能
 
@@ -114,17 +128,17 @@ obsidian-blackhole/
 ├── tsconfig.json       — TypeScript 配置
 ├── .gitignore
 └── src/
-    ├── main.ts         — 227 lines
-    ├── renderer.ts     — 223 lines
-    ├── shader.ts       — 418 lines (核心 GLSL ~360 行)
-    ├── capture.ts      — 78 lines
-    └── settings.ts     — 219 lines
+    ├── main.ts         — 272 lines
+    ├── renderer.ts     — 243 lines
+    ├── shader.ts       — 420 lines (核心 GLSL ~360 行)
+    ├── capture.ts      — 100 lines
+    └── settings.ts     — 220 lines
 ```
 
 ## 推荐的下一步
 
-1. 修掉 **致命级 3 个 bug**（token glide、首次空白帧、STAR_GAIN 变量名错误）
-2. 在真实 Obsidian 中加载，修 WebGL compile / runtime 错误
-3. 加上 debounced recompile
-4. `git init` 建立版本管理
-5. 优化 capture 性能（降低频率 + 条件触发）
+1. **在真实 Obsidian 中加载验证**（最重要）：刷新插件 → 看 DevTools console 有无 shader compile / WebGL runtime 错误，确认黑洞实际渲染、引力透镜对笔记生效。
+2. 验证三种模式：Token（改字数看 hole 平滑 glide）、Pomodoro（wall-clock 对齐）、Demo（42s 巡览 + 星场跟随预设）。
+3. 优化 capture 性能（条件触发：仅 hole visible 且 token level > 0.1 时截取；或降到 1fps）。
+4. 持久化 `enabled` 开关状态。
+5. 补 demo GIF / presets 截图到 README。
