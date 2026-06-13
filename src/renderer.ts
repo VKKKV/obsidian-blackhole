@@ -24,12 +24,15 @@ export class BlackHoleRenderer {
   private uDate!: WebGLUniformLocation;
   private uLastActivity!: WebGLUniformLocation;
   private uTokenLevel!: WebGLUniformLocation;
+  private uTokenPrev!: WebGLUniformLocation;
+  private uTokenChangeTime!: WebGLUniformLocation;
   private uSizeMode!: WebGLUniformLocation;
 
   // state
   public tokenLevel = 0.0;
   public prevTokenLevel = 0.0;
   public lastTokenChange = 0.0;
+  private lastTokenLevel = 0.0;
   public lastActivity = 0.0;
   public sizeMode = 1;
 
@@ -171,6 +174,8 @@ export class BlackHoleRenderer {
     this.uDate = gl.getUniformLocation(prog, 'uDate')!;
     this.uLastActivity = gl.getUniformLocation(prog, 'uLastActivity')!;
     this.uTokenLevel = gl.getUniformLocation(prog, 'uTokenLevel')!;
+    this.uTokenPrev = gl.getUniformLocation(prog, 'uTokenPrev')!;
+    this.uTokenChangeTime = gl.getUniformLocation(prog, 'uTokenChangeTime')!;
     this.uSizeMode = gl.getUniformLocation(prog, 'uSizeMode')!;
 
     return true;
@@ -209,11 +214,15 @@ export class BlackHoleRenderer {
     gl.uniform4f(this.uDate, d.getFullYear(), d.getMonth() + 1, d.getDate(),
                  d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds());
 
-    if (this.prevTokenLevel !== this.tokenLevel) {
-      this.prevTokenLevel = this.tokenLevel;
+    // detect target changes: hold the pre-change value as the glide start
+    if (this.lastTokenLevel !== this.tokenLevel) {
+      this.prevTokenLevel = this.lastTokenLevel;
+      this.lastTokenLevel = this.tokenLevel;
       this.lastTokenChange = now / 1000;
     }
     gl.uniform1f(this.uTokenLevel, this.tokenLevel);
+    gl.uniform1f(this.uTokenPrev, this.prevTokenLevel);
+    gl.uniform1f(this.uTokenChangeTime, this.lastTokenChange);
     gl.uniform1i(this.uSizeMode, this.sizeMode);
 
     gl.bindVertexArray(this.vao);

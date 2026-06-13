@@ -1,4 +1,4 @@
-import { Plugin, Notice, MarkdownView } from 'obsidian';
+import { Plugin, Notice, MarkdownView, debounce } from 'obsidian';
 import {
   BlackHoleSettings, BlackHoleSettingsTab, DEFAULT_SETTINGS,
 } from './settings';
@@ -22,7 +22,7 @@ export default class BlackHolePlugin extends Plugin {
     await this.loadSettings();
     this.addSettingTab(new BlackHoleSettingsTab(this.app, this));
 
-    this.addRibbonIcon('goal', 'Toggle Black Hole', () => {
+    this.addRibbonIcon('circle-dot', 'Toggle Black Hole', () => {
       this.enabled = !this.enabled;
       if (this.enabled) this.start();
       else this.stop();
@@ -65,6 +65,8 @@ export default class BlackHolePlugin extends Plugin {
     // blank initial texture
     const blank = WorkspaceCapture.blankCanvas(window.innerWidth, window.innerHeight);
     this.renderer.updateTexture(blank);
+    // kick off a capture immediately so we don't render against blank for ~350ms
+    this.capture.capture(performance.now());
 
     // wire state
     this.renderer.sizeMode = this.settings.sizeMode;
@@ -131,10 +133,23 @@ export default class BlackHolePlugin extends Plugin {
 
   onModeChange() {
     if (!this.renderer) return;
+    // sizeMode is a uniform, not a baked const — no recompile needed.
     this.renderer.sizeMode = this.settings.sizeMode;
-    this.renderer.recompile(this.toShaderParams());
     this.capture?.reset();
   }
+
+  /**
+   * Tunable params are baked into the shader as compile-time consts, so changing
+   * one requires a recompile. Debounced so dragging a slider doesn't recompile
+   * the shader on every tick — only ~once the user pauses.
+   */
+  onParamsChange() {
+    this.recompileSoon();
+  }
+
+  private recompileSoon = debounce(() => {
+    if (this.renderer) this.renderer.recompile(this.toShaderParams());
+  }, 200, true);
 
   async saveSettings() { await this.saveData(this.settings); }
 

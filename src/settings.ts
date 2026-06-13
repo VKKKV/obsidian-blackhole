@@ -202,7 +202,7 @@ export class BlackHoleSettingsTab extends PluginSettingTab {
         sl.onChange(async (v) => {
           onChange(v);
           await this.plugin.saveSettings();
-          this.plugin.onModeChange(); // triggers shader recompile with new consts
+          this.plugin.onParamsChange(); // debounced shader recompile with new consts
         });
       })
       .addText((txt) => {
@@ -212,6 +212,7 @@ export class BlackHoleSettingsTab extends PluginSettingTab {
           if (!isNaN(v) && v >= min && v <= max) {
             onChange(v);
             await this.plugin.saveSettings();
+            this.plugin.onParamsChange();
           }
         });
       });

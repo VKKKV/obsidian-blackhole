@@ -68,6 +68,8 @@ uniform sampler2D uTexture;
 uniform vec4  uDate;
 uniform float uLastActivity;
 uniform float uTokenLevel;
+uniform float uTokenPrev;
+uniform float uTokenChangeTime;
 uniform int   uSizeMode;
 
 in vec2 vUv;
@@ -263,7 +265,7 @@ void main() {
         if (uSizeMode == MODE_DEMO) {
             lvl = min(mod(uTime, DEMO_SEC) / DEMO_GROW_SEC, 1.0);
         } else {
-            lvl = uTokenLevel;
+            lvl = glidedToken(uTokenLevel, uTokenPrev, uTokenChangeTime);
         }
         if (lvl < 0.0) { fragColor = texture(uTexture, uv); return; }
         float g = pow(clamp(lvl, 0.0, 1.0), TOKEN_EASE);
@@ -326,7 +328,7 @@ void main() {
             term[i]   = texture(uTexture, suv)[i];
         }
         vec3 dd = normalize(vec3(-(pr / b) * (2.0 / b), -1.0));
-        fragColor = vec4(term + stars(dd) * STAR_GAIN * window * shield, 1.0);
+        fragColor = vec4(term + stars(dd) * L.star * window * shield, 1.0);
         return;
     }
 
@@ -399,7 +401,7 @@ void main() {
     vec3 bg = vec3(0.0);
     if (!captured) {
         vec3 dd = normalize(v);
-        bg += stars(dd) * STAR_GAIN * window * shield;
+        bg += stars(dd) * L.star * window * shield;
         if (dd.z < -0.05) {
             float tpl = (-LENS_DEPTH - x.z) / dd.z;
             vec3  hp  = x + dd * tpl;
