@@ -95,7 +95,7 @@ GNU General Public License v3.0. See [LICENSE](LICENSE).
 
 The shader physics is adapted from
 [ghostty-blackhole](https://github.com/s0xDk/ghostty-blackhole) by
-[Kita (s0xDk)](https://github.com/s0xDk), which was in turn inspired by
+[s0xDk](https://github.com/s0xDk), which was in turn inspired by
 [Eric Bruneton's black hole shader](https://ebruneton.github.io/black_hole_shader/)
 (BSD-3-Clause). No code from Bruneton's project is used here — this shader is an
 independent screen-space approximation written from scratch.

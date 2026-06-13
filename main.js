@@ -1057,7 +1057,7 @@ var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
       sl.onChange(async (v) => {
         onChange(v);
         await this.plugin.saveSettings();
-        this.plugin.onModeChange();
+        this.plugin.onParamsChange();
       });
     }).addText((txt) => {
       txt.setValue(String(value));
@@ -1066,6 +1066,7 @@ var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
         if (!isNaN(v) && v >= min && v <= max) {
           onChange(v);
           await this.plugin.saveSettings();
+          this.plugin.onParamsChange();
         }
       });
     });
@@ -1095,6 +1096,8 @@ uniform sampler2D uTexture;
 uniform vec4  uDate;
 uniform float uLastActivity;
 uniform float uTokenLevel;
+uniform float uTokenPrev;
+uniform float uTokenChangeTime;
 uniform int   uSizeMode;
 
 in vec2 vUv;
@@ -1290,7 +1293,7 @@ void main() {
         if (uSizeMode == MODE_DEMO) {
             lvl = min(mod(uTime, DEMO_SEC) / DEMO_GROW_SEC, 1.0);
         } else {
-            lvl = uTokenLevel;
+            lvl = glidedToken(uTokenLevel, uTokenPrev, uTokenChangeTime);
         }
         if (lvl < 0.0) { fragColor = texture(uTexture, uv); return; }
         float g = pow(clamp(lvl, 0.0, 1.0), TOKEN_EASE);
@@ -1353,7 +1356,7 @@ void main() {
             term[i]   = texture(uTexture, suv)[i];
         }
         vec3 dd = normalize(vec3(-(pr / b) * (2.0 / b), -1.0));
-        fragColor = vec4(term + stars(dd) * STAR_GAIN * window * shield, 1.0);
+        fragColor = vec4(term + stars(dd) * L.star * window * shield, 1.0);
         return;
     }
 
@@ -1426,7 +1429,7 @@ void main() {
     vec3 bg = vec3(0.0);
     if (!captured) {
         vec3 dd = normalize(v);
-        bg += stars(dd) * STAR_GAIN * window * shield;
+        bg += stars(dd) * L.star * window * shield;
         if (dd.z < -0.05) {
             float tpl = (-LENS_DEPTH - x.z) / dd.z;
             vec3  hp  = x + dd * tpl;
@@ -1457,6 +1460,7 @@ var BlackHoleRenderer = class {
     this.tokenLevel = 0;
     this.prevTokenLevel = 0;
     this.lastTokenChange = 0;
+    this.lastTokenLevel = 0;
     this.lastActivity = 0;
     this.sizeMode = 1;
     this.prevTime = 0;
@@ -1483,11 +1487,14 @@ var BlackHoleRenderer = class {
         d.getDate(),
         d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()
       );
-      if (this.prevTokenLevel !== this.tokenLevel) {
-        this.prevTokenLevel = this.tokenLevel;
+      if (this.lastTokenLevel !== this.tokenLevel) {
+        this.prevTokenLevel = this.lastTokenLevel;
+        this.lastTokenLevel = this.tokenLevel;
         this.lastTokenChange = now / 1e3;
       }
       gl.uniform1f(this.uTokenLevel, this.tokenLevel);
+      gl.uniform1f(this.uTokenPrev, this.prevTokenLevel);
+      gl.uniform1f(this.uTokenChangeTime, this.lastTokenChange);
       gl.uniform1i(this.uSizeMode, this.sizeMode);
       gl.bindVertexArray(this.vao);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -1630,6 +1637,8 @@ var BlackHoleRenderer = class {
     this.uDate = gl.getUniformLocation(prog, "uDate");
     this.uLastActivity = gl.getUniformLocation(prog, "uLastActivity");
     this.uTokenLevel = gl.getUniformLocation(prog, "uTokenLevel");
+    this.uTokenPrev = gl.getUniformLocation(prog, "uTokenPrev");
+    this.uTokenChangeTime = gl.getUniformLocation(prog, "uTokenChangeTime");
     this.uSizeMode = gl.getUniformLocation(prog, "uSizeMode");
     return true;
   }
@@ -1725,6 +1734,10 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     this.captureIntervalId = 0;
     this.metricIntervalId = 0;
     this.domObserver = null;
+    this.recompileSoon = (0, import_obsidian2.debounce)(() => {
+      if (this.renderer)
+        this.renderer.recompile(this.toShaderParams());
+    }, 200, true);
     this.activityHandler = () => {
       this.lastActivity = performance.now();
       if (this.renderer)
@@ -1734,7 +1747,7 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
   async onload() {
     await this.loadSettings();
     this.addSettingTab(new BlackHoleSettingsTab(this.app, this));
-    this.addRibbonIcon("goal", "Toggle Black Hole", () => {
+    this.addRibbonIcon("circle-dot", "Toggle Black Hole", () => {
       this.enabled = !this.enabled;
       if (this.enabled)
         this.start();
@@ -1772,6 +1785,7 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     this.capture.setElement(this.findCaptureTarget());
     const blank = WorkspaceCapture.blankCanvas(window.innerWidth, window.innerHeight);
     this.renderer.updateTexture(blank);
+    this.capture.capture(performance.now());
     this.renderer.sizeMode = this.settings.sizeMode;
     this.renderer.lastActivity = performance.now() / 1e3;
     this.lastActivity = performance.now();
@@ -1825,8 +1839,15 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     if (!this.renderer)
       return;
     this.renderer.sizeMode = this.settings.sizeMode;
-    this.renderer.recompile(this.toShaderParams());
     this.capture?.reset();
+  }
+  /**
+   * Tunable params are baked into the shader as compile-time consts, so changing
+   * one requires a recompile. Debounced so dragging a slider doesn't recompile
+   * the shader on every tick — only ~once the user pauses.
+   */
+  onParamsChange() {
+    this.recompileSoon();
   }
   async saveSettings() {
     await this.saveData(this.settings);
