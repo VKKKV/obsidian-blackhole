@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Black Hole — Shader Harness</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #0d0f12; color: #d8dde3;
+      font: 13px/1.4 ui-sans-serif, system-ui, sans-serif; }
+    #app { display: flex; height: 100%; }
+    #stage { position: relative; flex: 1; min-width: 0; background: #000; overflow: hidden; }
+    #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    #controls { width: 300px; flex: none; padding: 14px 16px; overflow-y: auto;
+      border-left: 1px solid #23272e; background: #14171b; }
+    #controls h1 { font-size: 14px; margin: 0 0 4px; letter-spacing: .02em; }
+    #controls .hint { color: #7b828c; margin: 0 0 14px; font-size: 11.5px; }
+    .row { display: grid; grid-template-columns: 96px 1fr 52px; align-items: center;
+      gap: 8px; margin: 7px 0; }
+    .row label { color: #aeb6c0; font-size: 12px; }
+    .row input[type=range] { width: 100%; }
+    .row select { width: 100%; background: #1d2228; color: #d8dde3;
+      border: 1px solid #2c333b; border-radius: 4px; padding: 3px; }
+    .row .val { text-align: right; color: #8fd0c4; font-variant-numeric: tabular-nums;
+      font-size: 11.5px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="stage"></div>
+    <div id="controls">
+      <h1>Black Hole — Shader Harness</h1>
+      <p class="hint">
+        Demo mode auto-tours 8 presets. Switch to Token mode to drive the hole
+        with the Token-level slider. Param sliders recompile the shader live.
+      </p>
+    </div>
+  </div>
+  <script src="./harness.js"></script>
+</body>
+</html>

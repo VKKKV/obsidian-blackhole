@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "build": "node esbuild.config.js production",
-    "dev": "node esbuild.config.js"
+    "dev": "node esbuild.config.js",
+    "harness": "node esbuild.config.js harness"
   },
   "keywords": [],
   "author": "Kita",
