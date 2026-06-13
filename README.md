@@ -12,9 +12,12 @@ Doppler beaming — as a WebGL2 overlay for Obsidian.
 
 ## What it does
 
-The black hole renders on top of your notes using a **WebGL2 canvas** — no DOM
-manipulation, just raw fragment-shader ray tracing on the GPU. Every pixel near
-the hole integrates its own null geodesic through the Schwarzschild metric.
+The black hole renders on a **transparent WebGL2 canvas** stretched over your
+whole Obsidian window — your notes and UI stay fully visible and clickable, and
+the hole floats on top, free to drift anywhere. The canvas is opaque only where
+the hole actually is; everywhere else it's transparent. Every pixel near the
+hole integrates its own null geodesic through the Schwarzschild metric on the
+GPU.
 
 - **Shadow** — rays with impact parameter under `b_crit` spiral through the
   horizon and return black. Text near the edge is stretched into the photon ring
@@ -70,13 +73,17 @@ you control over every shader tunable:
 - **Accretion disk**: inner/outer radius, inclination, temperature, opacity,
   Doppler mix, beaming, streak pattern, speed, winding
 - **Pomodoro**: work period, break length, idle fade time
-- **Performance**: geodesic integration steps (N_STEPS) — trade quality for speed
+- **Performance**: geodesic integration steps (N_STEPS), render scale (lower =
+  faster on weak/software GPUs; also auto-drops if the frame rate stays low),
+  capture on/off, and capture interval
 
 ## How it works
 
-The plugin creates a `<canvas>` overlay on the workspace with `pointer-events: none`.
-A **WebGL2** render loop runs at display refresh rate, executing the same GLSL
-shader used by the original Ghostty version:
+The plugin mounts a full-window `<canvas>` overlay with `pointer-events: none`,
+so it never intercepts clicks. A **WebGL2** render loop runs at display refresh
+rate, executing the same GLSL shader used by the original Ghostty version —
+except the final output uses straight alpha, so the canvas is transparent away
+from the hole and your live notes show through:
 
 | Ghostty | Obsidian |
 |---------|----------|
@@ -86,8 +93,27 @@ shader used by the original Ghostty version:
 | `iDate` | `uDate` (JavaScript `Date`) |
 | `SIZE_MODE` compile-time define | `uSizeMode` runtime uniform |
 
-The workspace content is captured at ~3 fps and uploaded as a WebGL texture —
-the shader lensing effect warps your actual notes in real time.
+Ghostty samples the terminal as a free GPU texture; Obsidian's notes are DOM,
+which WebGL can't sample directly. So the plugin snapshots the window with
+`dom-to-image-more` — but **rendering and capture are decoupled**: the GPU
+animates the lens every frame against the *last* snapshot, while the (expensive,
+main-thread) capture only runs occasionally and on events (note switch, layout
+change, after scrolling settles). That keeps the lensing smooth without the
+per-frame screenshot cost. If capture still stutters on your machine, turn it
+off in settings — the hole then lenses the starfield only, at zero CPU cost.
+
+## Development
+
+```sh
+npm install
+npm run dev      # esbuild watch → rebuilds main.js on save (pair with the Hot Reload plugin)
+npm run harness  # standalone shader playground at http://localhost:8000 — no Obsidian needed
+npm run build    # production build
+```
+
+The **harness** renders the shader over mock "notes" in a plain browser page
+with live param sliders, so you can iterate on the shader (the bulk of the
+work) without launching Obsidian.
 
 ## License
 
