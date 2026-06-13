@@ -60,9 +60,11 @@ export default class BlackHolePlugin extends Plugin {
     canvas.className = 'blackhole-canvas';
     this.canvas = canvas;
 
-    const workspace = document.querySelector('.workspace');
-    if (workspace) workspace.appendChild(canvas);
-    else document.body.appendChild(canvas);
+    // Mount over the whole Obsidian window so the hole can roam everywhere
+    // (workspace, sidebars, ribbon). The canvas is transparent except near the
+    // hole, and pointer-events:none keeps everything underneath interactive.
+    const host = document.querySelector('.app-container') ?? document.body;
+    host.appendChild(canvas);
 
     // init renderer
     this.renderer = new BlackHoleRenderer(canvas, this.toShaderParams());
@@ -107,11 +109,13 @@ export default class BlackHolePlugin extends Plugin {
     document.addEventListener('touchstart', this.activityHandler);
     document.addEventListener('wheel', this.activityHandler, { passive: true });
 
-    // capture loop — trigger async capture every ~350ms, push to texture when ready
+    // Capture poll. dom-to-image is heavy and main-thread, so we DON'T capture
+    // every frame — the GPU animates the lens against the last snapshot. This
+    // poll just checks whether a fresh capture is due (capture() self-throttles
+    // to the configured interval) and uploads any new result.
     this.captureIntervalId = window.setInterval(() => {
       try {
         if (!this.renderer || !this.capture) return;
-        // initiate capture (async — will store result in latestCanvas)
         this.capture.capture(performance.now());
         // upload only when there's a genuinely new capture
         const cap = this.capture.latestCanvas;
@@ -122,7 +126,7 @@ export default class BlackHolePlugin extends Plugin {
       } catch (e) {
         console.error('BlackHole: capture tick failed.', e);
       }
-    }, 300);
+    }, 500);
 
     // metric polling for token mode
     this.metricIntervalId = window.setInterval(() => {
@@ -134,18 +138,20 @@ export default class BlackHolePlugin extends Plugin {
       }
     }, 500);
 
-    // refresh capture target when the active leaf or layout changes — far
-    // cheaper and more correct than a body-wide MutationObserver that fires
-    // on every keystroke.
+    // Re-capture when content actually changes — switching notes, layout
+    // changes, or after scrolling settles — instead of continuously. Keeps the
+    // snapshot fresh without the per-frame dom-to-image cost.
     const refresh = () => {
       try {
         this.capture?.setElement(this.findCaptureTarget());
+        this.capture?.requestSoon();
       } catch (e) {
         console.error('BlackHole: capture-target refresh failed.', e);
       }
     };
     this.leafChangeRef = this.app.workspace.on('active-leaf-change', refresh);
     this.layoutChangeRef = this.app.workspace.on('layout-change', refresh);
+    document.addEventListener('scroll', this.scrollHandler, { capture: true, passive: true });
   }
 
   stop() {
@@ -167,6 +173,7 @@ export default class BlackHolePlugin extends Plugin {
     document.removeEventListener('mousedown', this.activityHandler);
     document.removeEventListener('touchstart', this.activityHandler);
     document.removeEventListener('wheel', this.activityHandler);
+    document.removeEventListener('scroll', this.scrollHandler, { capture: true } as any);
 
     if (this.leafChangeRef) { this.app.workspace.offref(this.leafChangeRef); this.leafChangeRef = null; }
     if (this.layoutChangeRef) { this.app.workspace.offref(this.layoutChangeRef); this.layoutChangeRef = null; }
@@ -200,6 +207,13 @@ export default class BlackHolePlugin extends Plugin {
   private recompileSoon = debounce(() => {
     if (this.renderer) this.renderer.recompile(this.toShaderParams());
   }, 200, true);
+
+  // Re-capture once scrolling settles (trailing debounce) rather than on every
+  // scroll event — keeps the snapshot current without thrashing dom-to-image.
+  private requestCaptureSoon = debounce(() => {
+    this.capture?.requestSoon();
+  }, 250, true);
+  private scrollHandler = () => { this.requestCaptureSoon(); };
 
   async saveSettings() { await this.saveData(this.settings); }
 
@@ -284,11 +298,10 @@ export default class BlackHolePlugin extends Plugin {
   }
 
   private findCaptureTarget(): HTMLElement | null {
-    // Prefer the active leaf's content via DOM (avoids private `containerEl`).
-    const active = document.querySelector(
-      '.workspace-leaf.mod-active .view-content',
-    ) as HTMLElement | null;
-    if (active) return active;
-    return document.querySelector('.view-content') as HTMLElement | null;
+    // Capture the whole window so the lensed snapshot lines up with whatever
+    // the (window-wide) canvas is drawn over.
+    return (document.querySelector('.app-container')
+      ?? document.querySelector('.workspace')
+      ?? document.body) as HTMLElement | null;
   }
 }

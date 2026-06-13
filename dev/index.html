@@ -10,8 +10,15 @@
     html, body { margin: 0; height: 100%; background: #0d0f12; color: #d8dde3;
       font: 13px/1.4 ui-sans-serif, system-ui, sans-serif; }
     #app { display: flex; height: 100%; }
-    #stage { position: relative; flex: 1; min-width: 0; background: #000; overflow: hidden; }
+    #stage { position: relative; flex: 1; min-width: 0; background: #1b1f24; overflow: hidden; }
     #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    /* Mock "notes" behind the transparent canvas — proves the overlay lets the
+       real content show through, with the hole floating on top. */
+    #mock { position: absolute; inset: 0; padding: 32px 48px; overflow: hidden;
+      color: #d8dde3; font: 15px/1.7 ui-serif, Georgia, serif; }
+    #mock h2 { font-size: 22px; margin: 0 0 12px; color: #f0f3f6; }
+    #mock p { margin: 0 0 14px; max-width: 70ch; color: #b9c1cb; }
+    #mock .tag { color: #8fd0c4; }
     #controls { width: 300px; flex: none; padding: 14px 16px; overflow-y: auto;
       border-left: 1px solid #23272e; background: #14171b; }
     #controls h1 { font-size: 14px; margin: 0 0 4px; letter-spacing: .02em; }
@@ -28,12 +35,31 @@
 </head>
 <body>
   <div id="app">
-    <div id="stage"></div>
+    <div id="stage">
+      <div id="mock">
+        <h2>The Schwarzschild Metric</h2>
+        <p>A black hole bends the paths of light around it. Photons passing
+          close to the event horizon follow curved null geodesics, so the sky
+          behind the hole is lensed, magnified, and mirrored into an Einstein
+          ring. This text is live DOM — the canvas floats <span class="tag">on top of it</span>.</p>
+        <p>If the overlay is working, you can read these paragraphs clearly
+          everywhere except where the hole distorts them. The accretion disk,
+          photon ring, and starfield render on the transparent canvas above.</p>
+        <p>Drag the sliders on the right to tune the shader. Switch to Token
+          mode and move the Token-level slider to grow and shrink the hole as
+          it drifts across the page. Far from the hole the canvas is fully
+          transparent, so this content stays crisp and (in Obsidian) clickable.</p>
+        <p>Gravitational time dilation freezes the inner disk; relativistic
+          Doppler beaming brightens the approaching side. None of that should
+          stop you from reading the parts of the page the hole isn't covering.</p>
+      </div>
+    </div>
     <div id="controls">
       <h1>Black Hole — Shader Harness</h1>
       <p class="hint">
-        Demo mode auto-tours 8 presets. Switch to Token mode to drive the hole
-        with the Token-level slider. Param sliders recompile the shader live.
+        The text behind the canvas is live DOM. Demo mode auto-tours 8 presets;
+        Token mode is driven by the Token-level slider. Param sliders recompile
+        the shader live.
       </p>
     </div>
   </div>

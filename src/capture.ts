@@ -142,6 +142,9 @@ export class WorkspaceCapture {
     this.currentInterval = this.baseInterval;
   }
 
+  /** Force the next poll to capture immediately (e.g. content changed). */
+  requestSoon() { this.lastCapture = 0; }
+
   /** A transparent placeholder canvas to seed the texture before first capture. */
   static blankCanvas(w: number, h: number): HTMLCanvasElement {
     const c = document.createElement('canvas');

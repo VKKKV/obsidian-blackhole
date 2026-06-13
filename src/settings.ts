@@ -84,7 +84,7 @@ export const DEFAULT_SETTINGS: BlackHoleSettings = {
   idleFadeSec: 90,
   renderScale: 1.0,
   captureEnabled: true,
-  captureIntervalMs: 700,
+  captureIntervalMs: 1500,
 };
 
 export class BlackHoleSettingsTab extends PluginSettingTab {

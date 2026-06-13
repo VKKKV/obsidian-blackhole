@@ -936,7 +936,7 @@ var DEFAULT_SETTINGS = {
   idleFadeSec: 90,
   renderScale: 1,
   captureEnabled: true,
-  captureIntervalMs: 700
+  captureIntervalMs: 1500
 };
 var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -1328,7 +1328,7 @@ void main() {
         } else {
             lvl = glidedToken(uTokenLevel, uTokenPrev, uTokenChangeTime);
         }
-        if (lvl < 0.0) { fragColor = texture(uTexture, uv); return; }
+        if (lvl < 0.0) { fragColor = vec4(0.0); return; }
         float g = pow(clamp(lvl, 0.0, 1.0), TOKEN_EASE);
         I = mix(0.10, 1.0, g);
         float rhMin = sqrt(TOKEN_AREA_MIN * aspect / 3.1415927);
@@ -1354,12 +1354,16 @@ void main() {
 
     float vis = smoothstep(0.0, 0.10, I);
     if (vis <= 0.0) {
-        fragColor = texture(uTexture, uv);
+        fragColor = vec4(0.0);
         return;
     }
     float rh = HOLE_RADIUS * sz;
     float dil = mix(1.0, DILATION_MIN, I);
-    float shield = vis * smoothstep(WORK_AREA, WORK_AREA + 0.18, yUp);
+    // Overlay model: the canvas is transparent except near the hole, so the
+    // live Obsidian DOM shows through everywhere else. "shield" is the effect
+    // coverage; we no longer gate it to a work-area band \u2014 the hole roams the
+    // whole window.
+    float shield = vis;
 
     vec2  p    = (uv - center) * vec2(aspect, 1.0);
     float plen = length(p);
@@ -1389,7 +1393,11 @@ void main() {
             term[i]   = texture(uTexture, suv)[i];
         }
         vec3 dd = normalize(vec3(-(pr / b) * (2.0 / b), -1.0));
-        fragColor = vec4(term + stars(dd) * L.star * window * shield, 1.0);
+        vec3 sky = stars(dd) * L.star * window * shield;
+        // straight-alpha overlay: coverage fades out away from the hole so the
+        // live DOM shows through; near the hole we reveal the lensed sample.
+        float a = clamp(window * shield, 0.0, 1.0);
+        fragColor = vec4(term + sky, a);
         return;
     }
 
@@ -1474,8 +1482,13 @@ void main() {
         }
     }
 
-    vec3 col = bg * trans + (vec3(1.0) - exp(-emitc * L.expo));
-    fragColor = vec4(col, 1.0);
+    vec3 emitRGB = vec3(1.0) - exp(-emitc * L.expo);
+    float emitLum = max(emitRGB.r, max(emitRGB.g, emitRGB.b));
+    vec3 col = bg * trans + emitRGB;
+    // Coverage: opaque inside the shadow, bright where the disk emits, and the
+    // lensing window elsewhere \u2014 transparent (live DOM) far from the hole.
+    float a = captured ? 1.0 : clamp(max(window * shield, emitLum), 0.0, 1.0);
+    fragColor = vec4(col, a);
 }
 `;
 }
@@ -1862,6 +1875,10 @@ var WorkspaceCapture = class {
     this.failures = 0;
     this.currentInterval = this.baseInterval;
   }
+  /** Force the next poll to capture immediately (e.g. content changed). */
+  requestSoon() {
+    this.lastCapture = 0;
+  }
   /** A transparent placeholder canvas to seed the texture before first capture. */
   static blankCanvas(w, h) {
     const c = document.createElement("canvas");
@@ -1890,6 +1907,14 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
       if (this.renderer)
         this.renderer.recompile(this.toShaderParams());
     }, 200, true);
+    // Re-capture once scrolling settles (trailing debounce) rather than on every
+    // scroll event — keeps the snapshot current without thrashing dom-to-image.
+    this.requestCaptureSoon = (0, import_obsidian2.debounce)(() => {
+      this.capture?.requestSoon();
+    }, 250, true);
+    this.scrollHandler = () => {
+      this.requestCaptureSoon();
+    };
     this.activityHandler = () => {
       this.lastActivity = performance.now();
       if (this.renderer)
@@ -1931,11 +1956,8 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     const canvas = document.createElement("canvas");
     canvas.className = "blackhole-canvas";
     this.canvas = canvas;
-    const workspace = document.querySelector(".workspace");
-    if (workspace)
-      workspace.appendChild(canvas);
-    else
-      document.body.appendChild(canvas);
+    const host = document.querySelector(".app-container") ?? document.body;
+    host.appendChild(canvas);
     this.renderer = new BlackHoleRenderer(canvas, this.toShaderParams());
     if (!this.renderer.init()) {
       console.error("BlackHole: WebGL2 not available");
@@ -1976,7 +1998,7 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
       } catch (e) {
         console.error("BlackHole: capture tick failed.", e);
       }
-    }, 300);
+    }, 500);
     this.metricIntervalId = window.setInterval(() => {
       try {
         if (!this.renderer || this.settings.sizeMode !== 1)
@@ -1989,12 +2011,14 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     const refresh = () => {
       try {
         this.capture?.setElement(this.findCaptureTarget());
+        this.capture?.requestSoon();
       } catch (e) {
         console.error("BlackHole: capture-target refresh failed.", e);
       }
     };
     this.leafChangeRef = this.app.workspace.on("active-leaf-change", refresh);
     this.layoutChangeRef = this.app.workspace.on("layout-change", refresh);
+    document.addEventListener("scroll", this.scrollHandler, { capture: true, passive: true });
   }
   stop() {
     if (this.renderer) {
@@ -2014,6 +2038,7 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     document.removeEventListener("mousedown", this.activityHandler);
     document.removeEventListener("touchstart", this.activityHandler);
     document.removeEventListener("wheel", this.activityHandler);
+    document.removeEventListener("scroll", this.scrollHandler, { capture: true });
     if (this.leafChangeRef) {
       this.app.workspace.offref(this.leafChangeRef);
       this.leafChangeRef = null;
@@ -2125,12 +2150,7 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     }
   }
   findCaptureTarget() {
-    const active = document.querySelector(
-      ".workspace-leaf.mod-active .view-content"
-    );
-    if (active)
-      return active;
-    return document.querySelector(".view-content");
+    return document.querySelector(".app-container") ?? document.querySelector(".workspace") ?? document.body;
   }
 };
 /*! Bundled license information:

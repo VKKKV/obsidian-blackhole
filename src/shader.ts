@@ -267,7 +267,7 @@ void main() {
         } else {
             lvl = glidedToken(uTokenLevel, uTokenPrev, uTokenChangeTime);
         }
-        if (lvl < 0.0) { fragColor = texture(uTexture, uv); return; }
+        if (lvl < 0.0) { fragColor = vec4(0.0); return; }
         float g = pow(clamp(lvl, 0.0, 1.0), TOKEN_EASE);
         I = mix(0.10, 1.0, g);
         float rhMin = sqrt(TOKEN_AREA_MIN * aspect / 3.1415927);
@@ -293,12 +293,16 @@ void main() {
 
     float vis = smoothstep(0.0, 0.10, I);
     if (vis <= 0.0) {
-        fragColor = texture(uTexture, uv);
+        fragColor = vec4(0.0);
         return;
     }
     float rh = HOLE_RADIUS * sz;
     float dil = mix(1.0, DILATION_MIN, I);
-    float shield = vis * smoothstep(WORK_AREA, WORK_AREA + 0.18, yUp);
+    // Overlay model: the canvas is transparent except near the hole, so the
+    // live Obsidian DOM shows through everywhere else. "shield" is the effect
+    // coverage; we no longer gate it to a work-area band — the hole roams the
+    // whole window.
+    float shield = vis;
 
     vec2  p    = (uv - center) * vec2(aspect, 1.0);
     float plen = length(p);
@@ -328,7 +332,11 @@ void main() {
             term[i]   = texture(uTexture, suv)[i];
         }
         vec3 dd = normalize(vec3(-(pr / b) * (2.0 / b), -1.0));
-        fragColor = vec4(term + stars(dd) * L.star * window * shield, 1.0);
+        vec3 sky = stars(dd) * L.star * window * shield;
+        // straight-alpha overlay: coverage fades out away from the hole so the
+        // live DOM shows through; near the hole we reveal the lensed sample.
+        float a = clamp(window * shield, 0.0, 1.0);
+        fragColor = vec4(term + sky, a);
         return;
     }
 
@@ -413,8 +421,13 @@ void main() {
         }
     }
 
-    vec3 col = bg * trans + (vec3(1.0) - exp(-emitc * L.expo));
-    fragColor = vec4(col, 1.0);
+    vec3 emitRGB = vec3(1.0) - exp(-emitc * L.expo);
+    float emitLum = max(emitRGB.r, max(emitRGB.g, emitRGB.b));
+    vec3 col = bg * trans + emitRGB;
+    // Coverage: opaque inside the shadow, bright where the disk emits, and the
+    // lensing window elsewhere — transparent (live DOM) far from the hole.
+    float a = captured ? 1.0 : clamp(max(window * shield, emitLum), 0.0, 1.0);
+    fragColor = vec4(col, a);
 }
 `;
 }
