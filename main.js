@@ -933,7 +933,10 @@ var DEFAULT_SETTINGS = {
   nSteps: 48,
   workPeriodMin: 55,
   breakMin: 5,
-  idleFadeSec: 90
+  idleFadeSec: 90,
+  renderScale: 1,
+  captureEnabled: true,
+  captureIntervalMs: 700
 };
 var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -1041,9 +1044,39 @@ var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(containerEl).setName("Integration Steps").setDesc("Geodesic steps per pixel \u2014 higher = more accurate but slower").addSlider((sl) => {
       sl.setLimits(8, 128, 2);
       sl.setValue(this.plugin.settings.nSteps);
+      sl.setDynamicTooltip();
       sl.onChange(async (v) => {
         this.plugin.settings.nSteps = v;
         await this.plugin.saveSettings();
+        this.plugin.onParamsChange();
+      });
+    });
+    new import_obsidian.Setting(containerEl).setName("Render Scale").setDesc("Resolution the shader renders at (lower = much faster on weak/software GPUs). Auto-drops if frame rate stays low.").addSlider((sl) => {
+      sl.setLimits(0.4, 1, 0.05);
+      sl.setValue(this.plugin.settings.renderScale);
+      sl.setDynamicTooltip();
+      sl.onChange(async (v) => {
+        this.plugin.settings.renderScale = v;
+        await this.plugin.saveSettings();
+        this.plugin.applyRuntimeSettings();
+      });
+    });
+    new import_obsidian.Setting(containerEl).setName("Capture Workspace").setDesc("Warp your actual notes into the lens. Turn OFF if the UI stutters \u2014 the hole then lenses the starfield only (no main-thread cost).").addToggle((tg) => {
+      tg.setValue(this.plugin.settings.captureEnabled);
+      tg.onChange(async (v) => {
+        this.plugin.settings.captureEnabled = v;
+        await this.plugin.saveSettings();
+        this.plugin.applyRuntimeSettings();
+      });
+    });
+    new import_obsidian.Setting(containerEl).setName("Capture Interval (ms)").setDesc("How often the workspace is re-captured. Higher = smoother UI, less responsive lensing.").addSlider((sl) => {
+      sl.setLimits(300, 3e3, 50);
+      sl.setValue(this.plugin.settings.captureIntervalMs);
+      sl.setDynamicTooltip();
+      sl.onChange(async (v) => {
+        this.plugin.settings.captureIntervalMs = v;
+        await this.plugin.saveSettings();
+        this.plugin.applyRuntimeSettings();
       });
     });
     this.slider("Token Area Max (\xD71e-3)", this.plugin.settings.tokenAreaMax * 1e3, 0.1, 20, 0.1, (v) => {
@@ -1463,6 +1496,18 @@ var BlackHoleRenderer = class {
     this.lastTokenLevel = 0;
     this.lastActivity = 0;
     this.sizeMode = 1;
+    // perf
+    this.softwareRenderer = false;
+    /** When true, auto-drop render scale if frames stay slow. */
+    this.autoQuality = true;
+    /** Backing-store resolution factor (CSS px × this). The canvas is stretched
+     *  to 100% via CSS, so < 1 renders fewer fragments — a big GPU win. */
+    this.renderScale = 1;
+    this.minRenderScale = 0.4;
+    this.dtAvg = 0;
+    // EMA of frame time (s)
+    this.lastScaleAdjust = 0;
+    // timestamp guard for auto-downscale
     this.prevTime = 0;
     this.frameCount = 0;
     this.loop = (now) => {
@@ -1485,11 +1530,28 @@ var BlackHoleRenderer = class {
       alpha: true,
       premultipliedAlpha: false,
       antialias: false,
-      preserveDrawingBuffer: false
+      preserveDrawingBuffer: false,
+      // Ask the OS/Electron for the discrete/high-performance GPU rather than
+      // an integrated or software fallback — the geodesic shader is heavy.
+      powerPreference: "high-performance",
+      // Let the compositor present without forcing main-thread sync each frame.
+      desynchronized: true
     });
     if (!gl)
       return false;
     this.gl = gl;
+    try {
+      const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+      const rendererName = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : "";
+      console.info("BlackHole: WebGL renderer =", rendererName || "(unknown)");
+      this.softwareRenderer = /swiftshader|llvmpipe|software|basic render/i.test(rendererName);
+      if (this.softwareRenderer) {
+        console.warn(
+          "BlackHole: running on a SOFTWARE WebGL renderer (no GPU acceleration). Enable hardware acceleration in your OS / GPU drivers for smooth rendering. Quality has been auto-reduced."
+        );
+      }
+    } catch {
+    }
     if (!this.buildProgram())
       return false;
     this.vao = gl.createVertexArray();
@@ -1565,13 +1627,21 @@ var BlackHoleRenderer = class {
     const parent = this.canvas.parentElement;
     if (!parent)
       return;
-    const w = parent.clientWidth;
-    const h = parent.clientHeight;
-    if (w === 0 || h === 0)
+    const cw = parent.clientWidth;
+    const ch = parent.clientHeight;
+    if (cw === 0 || ch === 0)
       return;
+    const s = Math.max(this.minRenderScale, Math.min(1, this.renderScale));
+    const w = Math.max(1, Math.round(cw * s));
+    const h = Math.max(1, Math.round(ch * s));
     this.canvas.width = w;
     this.canvas.height = h;
     this.gl.viewport(0, 0, w, h);
+  }
+  /** Set the backing-store resolution factor and re-size immediately. */
+  setRenderScale(scale) {
+    this.renderScale = Math.max(this.minRenderScale, Math.min(1, scale));
+    this.resize();
   }
   getSize() {
     return { width: this.canvas.width, height: this.canvas.height };
@@ -1635,6 +1705,15 @@ var BlackHoleRenderer = class {
     const dt = Math.min((now - this.prevTime) / 1e3, 0.1);
     this.prevTime = now;
     this.frameCount++;
+    this.dtAvg = this.dtAvg ? this.dtAvg * 0.9 + dt * 0.1 : dt;
+    if (this.autoQuality && this.frameCount > 60 && this.dtAvg > 0.045 && this.renderScale > this.minRenderScale && now - this.lastScaleAdjust > 1500) {
+      this.lastScaleAdjust = now;
+      this.setRenderScale(this.renderScale - 0.15);
+      console.warn(
+        `BlackHole: low FPS (~${Math.round(1 / this.dtAvg)}) \u2014 render scale \u2192 ${this.renderScale.toFixed(2)}`
+      );
+      this.dtAvg = 0.025;
+    }
     gl.useProgram(this.program);
     gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);
     gl.uniform1f(this.uTime, now / 1e3);
@@ -1666,8 +1745,10 @@ var BlackHoleRenderer = class {
 
 // src/capture.ts
 var domToImage = __toESM(require_dom_to_image_more_min());
-var CAPTURE_INTERVAL = 350;
-var CAPTURE_SCALE = 0.5;
+var DEFAULT_INTERVAL = 700;
+var MAX_INTERVAL = 4e3;
+var DEFAULT_SCALE = 0.4;
+var SLOW_BACKOFF = 3;
 var MAX_CONSECUTIVE_FAILURES = 5;
 var WorkspaceCapture = class {
   constructor() {
@@ -1675,6 +1756,12 @@ var WorkspaceCapture = class {
     this.el = null;
     this.failed = false;
     this.failures = 0;
+    this.inFlight = false;
+    // don't overlap captures
+    this.baseInterval = DEFAULT_INTERVAL;
+    this.currentInterval = DEFAULT_INTERVAL;
+    this.scale = DEFAULT_SCALE;
+    this.enabled = true;
     /** The most recent successfully captured canvas. */
     this.latestCanvas = null;
     /** Time of the latest successful capture (monotonic). */
@@ -1683,16 +1770,26 @@ var WorkspaceCapture = class {
   setElement(el) {
     this.el = el;
   }
+  /** Tune cadence / resolution / on-off from settings. */
+  setOptions(opts) {
+    if (opts.enabled !== void 0)
+      this.enabled = opts.enabled;
+    if (opts.intervalMs !== void 0) {
+      this.baseInterval = Math.max(100, opts.intervalMs);
+      this.currentInterval = Math.max(this.currentInterval, this.baseInterval);
+    }
+    if (opts.scale !== void 0)
+      this.scale = Math.max(0.1, Math.min(1, opts.scale));
+  }
   /**
    * Trigger an async capture. Returns `true` if a capture was initiated.
    * Resolves by updating `latestCanvas` when dom-to-image finishes.
-   * Rate-limited internally. After repeated failures it disables itself so a
-   * persistently broken DOM/CSS can't throw on every tick.
+   * Rate-limited and self-throttling.
    */
   capture(now) {
-    if (this.failed || !this.el)
+    if (!this.enabled || this.failed || !this.el || this.inFlight)
       return false;
-    if (now - this.lastCapture < CAPTURE_INTERVAL)
+    if (now - this.lastCapture < this.currentInterval)
       return false;
     this.lastCapture = now;
     const el = this.el;
@@ -1700,11 +1797,13 @@ var WorkspaceCapture = class {
     const h = el.offsetHeight;
     if (w === 0 || h === 0)
       return false;
+    const started = performance.now();
+    this.inFlight = true;
     try {
       domToImage.toCanvas(el, {
-        width: Math.round(w * CAPTURE_SCALE),
-        height: Math.round(h * CAPTURE_SCALE),
-        scale: CAPTURE_SCALE,
+        width: Math.round(w * this.scale),
+        height: Math.round(h * this.scale),
+        scale: this.scale,
         // CRITICAL: do not let dom-to-image fetch fonts or images. In Obsidian
         // those resolve to `app://` URLs served by the *main process* protocol
         // handler, which decodeURIComponent()s the path and throws an uncaught
@@ -1726,14 +1825,26 @@ var WorkspaceCapture = class {
         this.latestCanvas = canvas;
         this.latestCaptureTime = performance.now();
         this.failures = 0;
+        this.adjustInterval(performance.now() - started);
       }).catch((e) => {
         this.noteFailure(e);
+      }).then(() => {
+        this.inFlight = false;
       });
     } catch (e) {
+      this.inFlight = false;
       this.noteFailure(e);
       return false;
     }
     return true;
+  }
+  /** Widen the interval when a capture is expensive so we never spend more
+   *  time blocking the main thread than the budget allows. */
+  adjustInterval(durationMs) {
+    this.currentInterval = Math.min(
+      MAX_INTERVAL,
+      Math.max(this.baseInterval, Math.round(durationMs * SLOW_BACKOFF))
+    );
   }
   noteFailure(e) {
     this.failures++;
@@ -1745,19 +1856,17 @@ var WorkspaceCapture = class {
       );
     }
   }
-  /** Reset failure state (e.g. after a mode change). */
+  /** Reset failure/backoff state (e.g. after a mode change). */
   reset() {
     this.failed = false;
     this.failures = 0;
+    this.currentInterval = this.baseInterval;
   }
-  /**
-   * Try to take a synchronous capture (won't reflect latest DOM changes
-   * but gives us something to start with).
-   */
+  /** A transparent placeholder canvas to seed the texture before first capture. */
   static blankCanvas(w, h) {
     const c = document.createElement("canvas");
-    c.width = Math.round(w * CAPTURE_SCALE);
-    c.height = Math.round(h * CAPTURE_SCALE);
+    c.width = Math.max(1, Math.round(w * DEFAULT_SCALE));
+    c.height = Math.max(1, Math.round(h * DEFAULT_SCALE));
     return c;
   }
 };
@@ -1776,6 +1885,7 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     this.metricIntervalId = 0;
     this.leafChangeRef = null;
     this.layoutChangeRef = null;
+    this.lastUploadTime = 0;
     this.recompileSoon = (0, import_obsidian2.debounce)(() => {
       if (this.renderer)
         this.renderer.recompile(this.toShaderParams());
@@ -1839,6 +1949,11 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     this.capture.setElement(this.findCaptureTarget());
     const blank = WorkspaceCapture.blankCanvas(window.innerWidth, window.innerHeight);
     this.renderer.updateTexture(blank);
+    if (this.renderer.softwareRenderer && this.settings.renderScale > 0.6) {
+      this.renderer.setRenderScale(0.5);
+      new import_obsidian2.Notice("Black Hole: no GPU acceleration detected \u2014 quality reduced. Tune it under Settings \u2192 Performance.");
+    }
+    this.applyRuntimeSettings();
     this.capture.capture(performance.now());
     this.renderer.sizeMode = this.settings.sizeMode;
     this.renderer.lastActivity = performance.now() / 1e3;
@@ -1854,8 +1969,10 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
           return;
         this.capture.capture(performance.now());
         const cap = this.capture.latestCanvas;
-        if (cap)
+        if (cap && this.capture.latestCaptureTime !== this.lastUploadTime) {
+          this.lastUploadTime = this.capture.latestCaptureTime;
           this.renderer.updateTexture(cap);
+        }
       } catch (e) {
         console.error("BlackHole: capture tick failed.", e);
       }
@@ -1919,6 +2036,14 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
    */
   onParamsChange() {
     this.recompileSoon();
+  }
+  /** Apply non-shader runtime settings (render scale, capture cadence). */
+  applyRuntimeSettings() {
+    this.renderer?.setRenderScale(this.settings.renderScale);
+    this.capture?.setOptions({
+      enabled: this.settings.captureEnabled,
+      intervalMs: this.settings.captureIntervalMs
+    });
   }
   async saveSettings() {
     await this.saveData(this.settings);

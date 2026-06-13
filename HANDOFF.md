@@ -86,13 +86,20 @@ styles.css     — canvas overlay 定位（position: absolute, pointer-events: n
 
 ### 3. 可优化（仍待处理）
 
-- **dom-to-image 性能**: 仍每隔 ~350ms 截取整个 workspace leaf（0.5x 分辨率），CPU 开销较大。下一步可考虑：只有当 hole visible 且 token level > 0.1 时才 capture；或降到 1fps。（连续失败 5 次会自动停用，但正常路径未做条件触发。）
+- ✅ **dom-to-image 性能 / 卡顿**: 已大幅缓解。capture 默认降到 ~700ms / 0.4x,并做**自适应退避**(单次 capture 耗时 ×3 作为下次间隔上限,最高 4s),避免"capture 比渲染还慢"导致的死锁式冻结;新增 **Capture Workspace 开关**(关掉则只透镜星场,零主线程开销)。重复纹理不再重复上传。
 
-- **canvas z-index 冲突**: `z-index: 10` 在 Obsidian 复杂 stacking context 里可能偏低（modals = 100+）。`pointer-events: none` 保证点击穿透，所以暂未改动；若发现被遮挡可设 `var(--layer-cover)` 或 ≥100。
+- **GPU 加速 / 软件渲染**: WebGL context 现请求 `powerPreference:'high-performance'` + `desynchronized`。启动时探测 `WEBGL_debug_renderer_info`,若是 SwiftShader/llvmpipe 等**软件渲染器**会 console.warn 并自动降到 renderScale 0.5。另有 **Render Scale** 设置(0.4–1.0,backing-store 分辨率)+ RAF 内**自适应降分辨率**(连续低帧自动降,UI 卡到打不开设置时也能自救)。⚠️ 插件无法改 Electron 的硬件加速总开关——若仍软件渲染,需在系统/驱动层开启 GPU。
 
-- **World-count polling 500ms**: 大文件的 `editor.getValue()` + `split` 每 500ms 执行可能卡顿。考虑缓存 editor content hash，只有变化时才重新计算。（已包 try/catch，不会再因此抛 uncaught。）
+- **canvas z-index 冲突**: `z-index: 10` 在 Obsidian 复杂 stacking context 里可能偏低（modals = 100+）。`pointer-events: none` 保证点击穿透,所以暂未改动；若发现被遮挡可设 `var(--layer-cover)` 或 ≥100。
+
+- **World-count polling 500ms**: 大文件的 `editor.getValue()` + `split` 每 500ms 执行可能卡顿。考虑缓存 editor content hash,只有变化时才重新计算。（已包 try/catch,不会再因此抛 uncaught。）
 
 - **`enabled` 状态未持久化**: ribbon 关闭后重载插件会重新开启（`enabled` 不在 settings 里）。可加入 settings 持久化。
+
+### 开发工具
+
+- **shader harness**: `npm run harness` → http://localhost:8000,脱离 Obsidian 调 shader(详见 README / dev/)。
+- **Hot Reload**: 已装入 vault 并加入 community-plugins.json,插件目录有 `.git` + `.hotreload` 标记。配合 `npm run dev`(esbuild watch)改 `main.js` 自动重载。
 
 ### 4. 缺失功能
 

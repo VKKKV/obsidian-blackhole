@@ -36,6 +36,17 @@ export class BlackHoleRenderer {
   public lastActivity = 0.0;
   public sizeMode = 1;
 
+  // perf
+  public softwareRenderer = false;
+  /** When true, auto-drop render scale if frames stay slow. */
+  public autoQuality = true;
+  /** Backing-store resolution factor (CSS px × this). The canvas is stretched
+   *  to 100% via CSS, so < 1 renders fewer fragments — a big GPU win. */
+  public renderScale = 1.0;
+  private readonly minRenderScale = 0.4;
+  private dtAvg = 0;            // EMA of frame time (s)
+  private lastScaleAdjust = 0;  // timestamp guard for auto-downscale
+
   private prevTime = 0;
   private frameCount = 0;
   private resizeObserver: ResizeObserver;
@@ -50,9 +61,33 @@ export class BlackHoleRenderer {
     const gl = this.canvas.getContext('webgl2', {
       alpha: true, premultipliedAlpha: false,
       antialias: false, preserveDrawingBuffer: false,
+      // Ask the OS/Electron for the discrete/high-performance GPU rather than
+      // an integrated or software fallback — the geodesic shader is heavy.
+      powerPreference: 'high-performance',
+      // Let the compositor present without forcing main-thread sync each frame.
+      desynchronized: true,
     });
     if (!gl) return false;
     this.gl = gl;
+
+    // Report which GPU we actually got. If Electron handed us a software
+    // rasterizer (SwiftShader / llvmpipe), the shader will be unusably slow —
+    // flag it so we can drop quality automatically.
+    try {
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      const rendererName = dbg
+        ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL))
+        : '';
+      console.info('BlackHole: WebGL renderer =', rendererName || '(unknown)');
+      this.softwareRenderer = /swiftshader|llvmpipe|software|basic render/i.test(rendererName);
+      if (this.softwareRenderer) {
+        console.warn(
+          'BlackHole: running on a SOFTWARE WebGL renderer (no GPU acceleration). ' +
+          'Enable hardware acceleration in your OS / GPU drivers for smooth rendering. ' +
+          'Quality has been auto-reduced.',
+        );
+      }
+    } catch { /* debug ext unavailable — assume hardware */ }
 
     if (!this.buildProgram()) return false;
 
@@ -119,12 +154,21 @@ export class BlackHoleRenderer {
     if (!this.gl) return;
     const parent = this.canvas.parentElement;
     if (!parent) return;
-    const w = parent.clientWidth;
-    const h = parent.clientHeight;
-    if (w === 0 || h === 0) return;
+    const cw = parent.clientWidth;
+    const ch = parent.clientHeight;
+    if (cw === 0 || ch === 0) return;
+    const s = Math.max(this.minRenderScale, Math.min(1, this.renderScale));
+    const w = Math.max(1, Math.round(cw * s));
+    const h = Math.max(1, Math.round(ch * s));
     this.canvas.width = w;
     this.canvas.height = h;
     this.gl.viewport(0, 0, w, h);
+  }
+
+  /** Set the backing-store resolution factor and re-size immediately. */
+  setRenderScale(scale: number) {
+    this.renderScale = Math.max(this.minRenderScale, Math.min(1, scale));
+    this.resize();
   }
 
   getSize(): { width: number; height: number } {
@@ -213,6 +257,20 @@ export class BlackHoleRenderer {
     const dt = Math.min((now - this.prevTime) / 1000, 0.1);
     this.prevTime = now;
     this.frameCount++;
+
+    // Adaptive quality: if frames stay slow, drop the render scale (never auto
+    // -raise). This self-recovers even when the UI is too frozen to reach
+    // settings — the most likely escape hatch on a software renderer.
+    this.dtAvg = this.dtAvg ? this.dtAvg * 0.9 + dt * 0.1 : dt;
+    if (this.autoQuality && this.frameCount > 60 && this.dtAvg > 0.045
+        && this.renderScale > this.minRenderScale && now - this.lastScaleAdjust > 1500) {
+      this.lastScaleAdjust = now;
+      this.setRenderScale(this.renderScale - 0.15);
+      console.warn(
+        `BlackHole: low FPS (~${Math.round(1 / this.dtAvg)}) — render scale → ${this.renderScale.toFixed(2)}`,
+      );
+      this.dtAvg = 0.025; // settle before re-evaluating
+    }
 
     gl.useProgram(this.program);
     gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);

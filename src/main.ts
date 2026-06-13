@@ -18,6 +18,7 @@ export default class BlackHolePlugin extends Plugin {
   private metricIntervalId: number = 0;
   private leafChangeRef: EventRef | null = null;
   private layoutChangeRef: EventRef | null = null;
+  private lastUploadTime = 0;
 
   async onload() {
     await this.loadSettings();
@@ -80,6 +81,15 @@ export default class BlackHolePlugin extends Plugin {
     // blank initial texture
     const blank = WorkspaceCapture.blankCanvas(window.innerWidth, window.innerHeight);
     this.renderer.updateTexture(blank);
+
+    // apply perf settings; if no GPU (software renderer), drop quality so the
+    // heavy geodesic shader doesn't freeze the UI.
+    if (this.renderer.softwareRenderer && this.settings.renderScale > 0.6) {
+      this.renderer.setRenderScale(0.5);
+      new Notice('Black Hole: no GPU acceleration detected — quality reduced. Tune it under Settings → Performance.');
+    }
+    this.applyRuntimeSettings();
+
     // kick off a capture immediately so we don't render against blank for ~350ms
     this.capture.capture(performance.now());
 
@@ -103,9 +113,12 @@ export default class BlackHolePlugin extends Plugin {
         if (!this.renderer || !this.capture) return;
         // initiate capture (async — will store result in latestCanvas)
         this.capture.capture(performance.now());
-        // if a result accumulated since last check, upload it
+        // upload only when there's a genuinely new capture
         const cap = this.capture.latestCanvas;
-        if (cap) this.renderer.updateTexture(cap);
+        if (cap && this.capture.latestCaptureTime !== this.lastUploadTime) {
+          this.lastUploadTime = this.capture.latestCaptureTime;
+          this.renderer.updateTexture(cap);
+        }
       } catch (e) {
         console.error('BlackHole: capture tick failed.', e);
       }
@@ -173,6 +186,15 @@ export default class BlackHolePlugin extends Plugin {
    */
   onParamsChange() {
     this.recompileSoon();
+  }
+
+  /** Apply non-shader runtime settings (render scale, capture cadence). */
+  applyRuntimeSettings() {
+    this.renderer?.setRenderScale(this.settings.renderScale);
+    this.capture?.setOptions({
+      enabled: this.settings.captureEnabled,
+      intervalMs: this.settings.captureIntervalMs,
+    });
   }
 
   private recompileSoon = debounce(() => {

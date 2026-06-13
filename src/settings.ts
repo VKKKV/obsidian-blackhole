@@ -42,6 +42,9 @@ export interface BlackHoleSettings {
   workPeriodMin: number;
   breakMin: number;
   idleFadeSec: number;
+  renderScale: number;
+  captureEnabled: boolean;
+  captureIntervalMs: number;
 }
 
 export const DEFAULT_SETTINGS: BlackHoleSettings = {
@@ -79,6 +82,9 @@ export const DEFAULT_SETTINGS: BlackHoleSettings = {
   workPeriodMin: 55,
   breakMin: 5,
   idleFadeSec: 90,
+  renderScale: 1.0,
+  captureEnabled: true,
+  captureIntervalMs: 700,
 };
 
 export class BlackHoleSettingsTab extends PluginSettingTab {
@@ -185,8 +191,52 @@ export class BlackHoleSettingsTab extends PluginSettingTab {
       .setDesc('Geodesic steps per pixel — higher = more accurate but slower')
       .addSlider((sl) => {
         sl.setLimits(8, 128, 2); sl.setValue(this.plugin.settings.nSteps);
-        sl.onChange(async (v) => { this.plugin.settings.nSteps = v; await this.plugin.saveSettings(); });
+        sl.setDynamicTooltip();
+        sl.onChange(async (v) => {
+          this.plugin.settings.nSteps = v;
+          await this.plugin.saveSettings();
+          this.plugin.onParamsChange(); // baked const — needs recompile
+        });
       });
+
+    new Setting(containerEl)
+      .setName('Render Scale')
+      .setDesc('Resolution the shader renders at (lower = much faster on weak/software GPUs). Auto-drops if frame rate stays low.')
+      .addSlider((sl) => {
+        sl.setLimits(0.4, 1, 0.05); sl.setValue(this.plugin.settings.renderScale);
+        sl.setDynamicTooltip();
+        sl.onChange(async (v) => {
+          this.plugin.settings.renderScale = v;
+          await this.plugin.saveSettings();
+          this.plugin.applyRuntimeSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName('Capture Workspace')
+      .setDesc('Warp your actual notes into the lens. Turn OFF if the UI stutters — the hole then lenses the starfield only (no main-thread cost).')
+      .addToggle((tg) => {
+        tg.setValue(this.plugin.settings.captureEnabled);
+        tg.onChange(async (v) => {
+          this.plugin.settings.captureEnabled = v;
+          await this.plugin.saveSettings();
+          this.plugin.applyRuntimeSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName('Capture Interval (ms)')
+      .setDesc('How often the workspace is re-captured. Higher = smoother UI, less responsive lensing.')
+      .addSlider((sl) => {
+        sl.setLimits(300, 3000, 50); sl.setValue(this.plugin.settings.captureIntervalMs);
+        sl.setDynamicTooltip();
+        sl.onChange(async (v) => {
+          this.plugin.settings.captureIntervalMs = v;
+          await this.plugin.saveSettings();
+          this.plugin.applyRuntimeSettings();
+        });
+      });
+
     this.slider('Token Area Max (×1e-3)', this.plugin.settings.tokenAreaMax * 1000, 0.1, 20, 0.1, (v) => { this.plugin.settings.tokenAreaMax = v / 1000; });
   }
 
