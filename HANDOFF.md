@@ -92,13 +92,29 @@ styles.css     — canvas overlay 定位（position: fixed, 全窗, pointer-even
 
 - ✅ **dom-to-image 性能 / 卡顿**: 已大幅缓解。capture 默认降到 ~700ms / 0.4x,并做**自适应退避**(单次 capture 耗时 ×3 作为下次间隔上限,最高 4s),避免"capture 比渲染还慢"导致的死锁式冻结;新增 **Capture Workspace 开关**(关掉则只透镜星场,零主线程开销)。重复纹理不再重复上传。
 
-- **GPU 加速 / 软件渲染**: WebGL context 现请求 `powerPreference:'high-performance'` + `desynchronized`。启动时探测 `WEBGL_debug_renderer_info`,若是 SwiftShader/llvmpipe 等**软件渲染器**会 console.warn 并自动降到 renderScale 0.5。另有 **Render Scale** 设置(0.4–1.0,backing-store 分辨率)+ RAF 内**自适应降分辨率**(连续低帧自动降,UI 卡到打不开设置时也能自救)。⚠️ 插件无法改 Electron 的硬件加速总开关——若仍软件渲染,需在系统/驱动层开启 GPU。
+- ✅ **GPU 加速 / 软件渲染**: WebGL context 现请求 `powerPreference:'high-performance'` + `desynchronized`。启动时探测 `WEBGL_debug_renderer_info`,若是 SwiftShader/llvmpipe 等**软件渲染器**会 console.warn 并自动:
+  - 降到 `mediump` float precision（~2x fragment throughput）
+  - auto-quality 3 秒内开始自动降分辨率（不再是 60 帧后才触发）
+  - 默认 `renderScale` 已改为 0.6（原 1.0）
 
 - **canvas z-index 冲突**: `z-index: 10` 在 Obsidian 复杂 stacking context 里可能偏低（modals = 100+）。`pointer-events: none` 保证点击穿透,所以暂未改动；若发现被遮挡可设 `var(--layer-cover)` 或 ≥100。
 
 - **World-count polling 500ms**: 大文件的 `editor.getValue()` + `split` 每 500ms 执行可能卡顿。考虑缓存 editor content hash,只有变化时才重新计算。（已包 try/catch,不会再因此抛 uncaught。）
 
-- **`enabled` 状态未持久化**: ribbon 关闭后重载插件会重新开启（`enabled` 不在 settings 里）。可加入 settings 持久化。
+- ✅ **`enabled` 状态未持久化**: ribbon 关闭后重载插件会重新开启（`enabled` 不在 settings 里）。可加入 settings 持久化。
+
+### 5. 最新性能修复 (2026-06-14)
+
+解决了"五秒一帧"的完全冻结问题：
+
+- **默认 `nSteps` 48→24**：测地线积分步数减半，shader 每个像素工作量减半
+- **默认 `renderScale` 1.0→0.6**：GPU 只需渲染 ~36% 的像素
+- **`captureEnabled` 默认关闭**：新装插件不再自动启用 dom-to-image 截屏（opt-in 走设置开启）
+- **auto-quality 时间基触发**：不再等 60 帧（软件渲染下需 5 分钟），而是运行 3 秒后开始检查，低于 30fps 就自动降分辨率
+- **软件渲染 → `mediump` 精度**：检测到 SwiftShader/llvmpipe 时 shader 用 `mediump float`，吞吐量约 2x
+- **capture scale 0.4→0.25**：dom-to-image 截取分辨率降为 ~6%，透镜效果模糊不影响观感
+- **capture/metric 轮询 500→1000ms**：主线程压力减半
+- **word-count 缓存**：内容长度未变时直接返回上次结果，跳过 `getValue()` + `split()` 大数组分配
 
 ### 开发工具
 

@@ -1560,8 +1560,9 @@ var BlackHoleRenderer = class {
       console.info("BlackHole: WebGL renderer =", rendererName || "(unknown)");
       this.softwareRenderer = /swiftshader|llvmpipe|software|basic render/i.test(rendererName);
       if (this.softwareRenderer) {
+        const isWayland = typeof navigator !== "undefined" && /Wayland|wayland/i.test(navigator.userAgent);
         console.warn(
-          "BlackHole: running on a SOFTWARE WebGL renderer (no GPU acceleration). Enable hardware acceleration in your OS / GPU drivers for smooth rendering. Quality has been auto-reduced."
+          "BlackHole: running on a SOFTWARE WebGL renderer (" + rendererName + "). Hardware GPU is not being used for WebGL.\n" + (isWayland ? "This is a known Electron+Wayland+NVIDIA issue. Fix:\n  Run Obsidian with --ozone-platform=x11 via ~/.config/obsidian/user-flags.conf\n  (created automatically \u2014 restart Obsidian to apply)." : 'Check that your GPU drivers are installed and Obsidian/Electron is not started with --disable-gpu.\n  See Settings > Appearance > Advanced and ensure "Hardware acceleration" is ON.')
         );
       }
     } catch {
