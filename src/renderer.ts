@@ -49,6 +49,7 @@ export class BlackHoleRenderer {
 
   private prevTime = 0;
   private frameCount = 0;
+  private startTime = 0;
   private resizeObserver: ResizeObserver;
 
   constructor(canvas: HTMLCanvasElement, params: ShaderParams) {
@@ -132,6 +133,7 @@ export class BlackHoleRenderer {
     if (this.running) return;
     this.running = true;
     this.prevTime = performance.now();
+    this.startTime = this.prevTime;
     this.loop(this.prevTime);
   }
 
@@ -190,7 +192,7 @@ export class BlackHoleRenderer {
     const gl = this.gl!;
 
     const vs = this.compile(gl.VERTEX_SHADER, VS);
-    const fs = this.compile(gl.FRAGMENT_SHADER, makeFS(this.params));
+    const fs = this.compile(gl.FRAGMENT_SHADER, makeFS(this.params, this.softwareRenderer));
     if (!vs || !fs) return false;
 
     const prog = gl.createProgram()!;
@@ -262,8 +264,8 @@ export class BlackHoleRenderer {
     // -raise). This self-recovers even when the UI is too frozen to reach
     // settings — the most likely escape hatch on a software renderer.
     this.dtAvg = this.dtAvg ? this.dtAvg * 0.9 + dt * 0.1 : dt;
-    if (this.autoQuality && this.frameCount > 60 && this.dtAvg > 0.045
-        && this.renderScale > this.minRenderScale && now - this.lastScaleAdjust > 1500) {
+    if (this.autoQuality && (now - this.startTime) > 3000 && this.dtAvg > 0.033
+        && this.renderScale > this.minRenderScale && now - this.lastScaleAdjust > 2000) {
       this.lastScaleAdjust = now;
       this.setRenderScale(this.renderScale - 0.15);
       console.warn(

@@ -930,12 +930,12 @@ var DEFAULT_SETTINGS = {
   tokenReach: 1,
   tokenCalm: 0.04,
   tokenRush: 1.1,
-  nSteps: 48,
+  nSteps: 24,
   workPeriodMin: 55,
   breakMin: 5,
   idleFadeSec: 90,
-  renderScale: 1,
-  captureEnabled: true,
+  renderScale: 0.6,
+  captureEnabled: false,
   captureIntervalMs: 1500
 };
 var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
@@ -1115,10 +1115,10 @@ void main() {
     gl_Position = vec4(aPos, 0.0, 1.0);
 }
 `;
-function makeFS(p) {
+function makeFS(p, useMediump = false) {
   return `#version 300 es
-precision highp float;
-precision highp int;
+precision ${useMediump ? "mediump" : "highp"} float;
+precision ${useMediump ? "mediump" : "highp"} int;
 
 // ---- uniforms (set by renderer every frame) ----
 uniform vec2  uResolution;
@@ -1523,6 +1523,7 @@ var BlackHoleRenderer = class {
     // timestamp guard for auto-downscale
     this.prevTime = 0;
     this.frameCount = 0;
+    this.startTime = 0;
     this.loop = (now) => {
       if (!this.running || !this.gl || !this.program)
         return;
@@ -1617,6 +1618,7 @@ var BlackHoleRenderer = class {
       return;
     this.running = true;
     this.prevTime = performance.now();
+    this.startTime = this.prevTime;
     this.loop(this.prevTime);
   }
   stop() {
@@ -1673,7 +1675,7 @@ var BlackHoleRenderer = class {
   buildProgram() {
     const gl = this.gl;
     const vs = this.compile(gl.VERTEX_SHADER, VS);
-    const fs = this.compile(gl.FRAGMENT_SHADER, makeFS(this.params));
+    const fs = this.compile(gl.FRAGMENT_SHADER, makeFS(this.params, this.softwareRenderer));
     if (!vs || !fs)
       return false;
     const prog = gl.createProgram();
@@ -1719,7 +1721,7 @@ var BlackHoleRenderer = class {
     this.prevTime = now;
     this.frameCount++;
     this.dtAvg = this.dtAvg ? this.dtAvg * 0.9 + dt * 0.1 : dt;
-    if (this.autoQuality && this.frameCount > 60 && this.dtAvg > 0.045 && this.renderScale > this.minRenderScale && now - this.lastScaleAdjust > 1500) {
+    if (this.autoQuality && now - this.startTime > 3e3 && this.dtAvg > 0.033 && this.renderScale > this.minRenderScale && now - this.lastScaleAdjust > 2e3) {
       this.lastScaleAdjust = now;
       this.setRenderScale(this.renderScale - 0.15);
       console.warn(
@@ -1758,9 +1760,9 @@ var BlackHoleRenderer = class {
 
 // src/capture.ts
 var domToImage = __toESM(require_dom_to_image_more_min());
-var DEFAULT_INTERVAL = 700;
+var DEFAULT_INTERVAL = 1500;
 var MAX_INTERVAL = 4e3;
-var DEFAULT_SCALE = 0.4;
+var DEFAULT_SCALE = 0.25;
 var SLOW_BACKOFF = 3;
 var MAX_CONSECUTIVE_FAILURES = 5;
 var WorkspaceCapture = class {
@@ -1903,6 +1905,8 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
     this.leafChangeRef = null;
     this.layoutChangeRef = null;
     this.lastUploadTime = 0;
+    this.lastWordCountLen = -1;
+    this.lastWordCountResult = 0;
     this.recompileSoon = (0, import_obsidian2.debounce)(() => {
       if (this.renderer)
         this.renderer.recompile(this.toShaderParams());
@@ -1998,7 +2002,7 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
       } catch (e) {
         console.error("BlackHole: capture tick failed.", e);
       }
-    }, 500);
+    }, 1e3);
     this.metricIntervalId = window.setInterval(() => {
       try {
         if (!this.renderer || this.settings.sizeMode !== 1)
@@ -2007,7 +2011,7 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
       } catch (e) {
         console.error("BlackHole: metric tick failed.", e);
       }
-    }, 500);
+    }, 1e3);
     const refresh = () => {
       try {
         this.capture?.setElement(this.findCaptureTarget());
@@ -2126,8 +2130,12 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
           if (!mdView)
             return -1;
           const text = mdView.editor?.getValue() ?? "";
+          if (text.length === this.lastWordCountLen)
+            return this.lastWordCountResult;
+          this.lastWordCountLen = text.length;
           const words = text.split(/\s+/).filter((w) => w.length > 0).length;
-          return Math.min(words / this.settings.maxWordCount, 1);
+          this.lastWordCountResult = Math.min(words / this.settings.maxWordCount, 1);
+          return this.lastWordCountResult;
         }
         case "global-word-count": {
           const files = this.app.vault.getMarkdownFiles();

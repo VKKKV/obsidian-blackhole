@@ -18,9 +18,9 @@
 
 import * as domToImage from 'dom-to-image-more';
 
-const DEFAULT_INTERVAL = 700;   // ms between captures (base cadence)
+const DEFAULT_INTERVAL = 1500;  // ms between captures (base cadence)
 const MAX_INTERVAL = 4000;      // upper bound when backing off
-const DEFAULT_SCALE = 0.4;      // sub-res capture for performance
+const DEFAULT_SCALE = 0.25;      // sub-res capture for performance
 const SLOW_BACKOFF = 3;         // next interval >= lastDuration × this
 const MAX_CONSECUTIVE_FAILURES = 5;
 

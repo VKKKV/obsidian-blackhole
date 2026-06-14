@@ -78,12 +78,12 @@ export const DEFAULT_SETTINGS: BlackHoleSettings = {
   tokenReach: 1.0000,
   tokenCalm: 0.0400,
   tokenRush: 1.1000,
-  nSteps: 48,
+  nSteps: 24,
   workPeriodMin: 55,
   breakMin: 5,
   idleFadeSec: 90,
-  renderScale: 1.0,
-  captureEnabled: true,
+  renderScale: 0.6,
+  captureEnabled: false,
   captureIntervalMs: 1500,
 };
 

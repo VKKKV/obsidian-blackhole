@@ -19,6 +19,8 @@ export default class BlackHolePlugin extends Plugin {
   private leafChangeRef: EventRef | null = null;
   private layoutChangeRef: EventRef | null = null;
   private lastUploadTime = 0;
+  private lastWordCountLen = -1;
+  private lastWordCountResult = 0;
 
   async onload() {
     await this.loadSettings();
@@ -126,7 +128,7 @@ export default class BlackHolePlugin extends Plugin {
       } catch (e) {
         console.error('BlackHole: capture tick failed.', e);
       }
-    }, 500);
+    }, 1000);
 
     // metric polling for token mode
     this.metricIntervalId = window.setInterval(() => {
@@ -136,7 +138,7 @@ export default class BlackHolePlugin extends Plugin {
       } catch (e) {
         console.error('BlackHole: metric tick failed.', e);
       }
-    }, 500);
+    }, 1000);
 
     // Re-capture when content actually changes — switching notes, layout
     // changes, or after scrolling settles — instead of continuously. Keeps the
@@ -274,8 +276,12 @@ export default class BlackHolePlugin extends Plugin {
           const mdView = this.app.workspace.getActiveViewOfType(MarkdownView);
           if (!mdView) return -1;
           const text: string = mdView.editor?.getValue() ?? '';
+          // skip recomputation if content length hasn't changed (cheap O(1) check)
+          if (text.length === this.lastWordCountLen) return this.lastWordCountResult;
+          this.lastWordCountLen = text.length;
           const words = text.split(/\s+/).filter((w: string) => w.length > 0).length;
-          return Math.min(words / this.settings.maxWordCount, 1.0);
+          this.lastWordCountResult = Math.min(words / this.settings.maxWordCount, 1.0);
+          return this.lastWordCountResult;
         }
         case 'global-word-count': {
           const files = this.app.vault.getMarkdownFiles();

@@ -54,10 +54,10 @@ export interface ShaderParams {
  * constants — the shader gets the same optimisation benefits as the original
  * Ghostty version, and the compile cost is paid once per settings change.
  */
-export function makeFS(p: ShaderParams): string {
+export function makeFS(p: ShaderParams, useMediump = false): string {
   return `#version 300 es
-precision highp float;
-precision highp int;
+precision ${useMediump ? 'mediump' : 'highp'} float;
+precision ${useMediump ? 'mediump' : 'highp'} int;
 
 // ---- uniforms (set by renderer every frame) ----
 uniform vec2  uResolution;
