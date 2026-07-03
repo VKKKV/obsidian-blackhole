@@ -24,6 +24,11 @@ const DEFAULT_SCALE = 0.25;      // sub-res capture for performance
 const SLOW_BACKOFF = 3;         // next interval >= lastDuration × this
 const MAX_CONSECUTIVE_FAILURES = 5;
 
+type CaptureListener = (canvas: HTMLCanvasElement, captureTime: number) => void;
+type CaptureOptions = domToImage.Options & {
+  filterUrls?: (url: string, baseUrl?: string) => boolean;
+};
+
 export class WorkspaceCapture {
   private lastCapture = 0;
   private el: HTMLElement | null = null;
@@ -35,6 +40,7 @@ export class WorkspaceCapture {
   private scale = DEFAULT_SCALE;
 
   public enabled = true;
+  public onCapture: CaptureListener | null = null;
 
   /** The most recent successfully captured canvas. */
   latestCanvas: HTMLCanvasElement | null = null;
@@ -46,7 +52,11 @@ export class WorkspaceCapture {
 
   /** Tune cadence / resolution / on-off from settings. */
   setOptions(opts: { enabled?: boolean; intervalMs?: number; scale?: number }) {
-    if (opts.enabled !== undefined) this.enabled = opts.enabled;
+    if (opts.enabled !== undefined) {
+      const wasEnabled = this.enabled;
+      this.enabled = opts.enabled;
+      if (!wasEnabled && this.enabled) this.reset();
+    }
     if (opts.intervalMs !== undefined) {
       this.baseInterval = Math.max(100, opts.intervalMs);
       this.currentInterval = Math.max(this.currentInterval, this.baseInterval);
@@ -62,19 +72,19 @@ export class WorkspaceCapture {
   capture(now: number): boolean {
     if (!this.enabled || this.failed || !this.el || this.inFlight) return false;
     if (now - this.lastCapture < this.currentInterval) return false;
-    this.lastCapture = now;
 
     const el = this.el;
     const w = el.offsetWidth;
     const h = el.offsetHeight;
     if (w === 0 || h === 0) return false;
+    this.lastCapture = now;
 
     const started = performance.now();
     this.inFlight = true;
     try {
-      domToImage.toCanvas(el, {
-        width: Math.round(w * this.scale),
-        height: Math.round(h * this.scale),
+      const options: CaptureOptions = {
+        width: w,
+        height: h,
         scale: this.scale,
         // CRITICAL: do not let dom-to-image fetch fonts or images. In Obsidian
         // those resolve to `app://` URLs served by the *main process* protocol
@@ -86,6 +96,8 @@ export class WorkspaceCapture {
         disableInlineImages: true,
         // reading cross-origin stylesheet cssRules can also throw synchronously
         ignoreCSSRuleErrors: true,
+        // Faster, slightly less exact cache keys for computed styles.
+        styleCaching: 'relaxed',
         // belt-and-suspenders: block any remaining non-data URL from being fetched
         filterUrls: (url: string) => url.startsWith('data:'),
         filter: (n: Node) => {
@@ -94,11 +106,14 @@ export class WorkspaceCapture {
             return false;
           return true;
         },
-      }).then((canvas: HTMLCanvasElement) => {
+      };
+
+      domToImage.toCanvas(el, options).then((canvas: HTMLCanvasElement) => {
         this.latestCanvas = canvas;
         this.latestCaptureTime = performance.now();
         this.failures = 0;
         this.adjustInterval(performance.now() - started);
+        this.onCapture?.(canvas, this.latestCaptureTime);
       }).catch((e: unknown) => {
         this.noteFailure(e);
       }).then(() => {

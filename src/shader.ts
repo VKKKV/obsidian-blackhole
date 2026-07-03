@@ -2,7 +2,7 @@
 // Vertex shader — fullscreen quad
 // =============================================================================
 export const VS = `#version 300 es
-in vec2 aPos;
+layout(location = 0) in vec2 aPos;
 out vec2 vUv;
 void main() {
     vUv = aPos * 0.5 + 0.5;
@@ -71,6 +71,9 @@ uniform float uTokenLevel;
 uniform float uTokenPrev;
 uniform float uTokenChangeTime;
 uniform int   uSizeMode;
+uniform int   uCaptureEnabled;
+uniform vec2  uViewportOrigin;
+uniform vec2  uViewportSize;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -113,6 +116,8 @@ const float TIME_SCALE      = 1.0000;
 const float DEMO_SEC        = 42.0000;
 const float DEMO_GROW_SEC   = 40.0000;
 const float DEMO_XFADE      = 0.1800;
+const float ALPHA_EPS       = 0.0100;
+const float SIZE_GAIN       = 0.5500;
 
 const int N_STEPS = ${p.nSteps};
 const int MODE_POMODORO = 0;
@@ -224,10 +229,9 @@ float glidedToken(float cur, float prev, float tChange) {
 
 // ------------------------------------------------------------------- image --
 void main() {
-    vec2 uv = vUv;
+    vec2 uv = uViewportOrigin + vUv * uViewportSize;
     vec2  res    = uResolution;
     float aspect = res.x / res.y;
-    float yUp = 1.0 - uv.y;
     float t = uTime * DRIFT_SPEED;
 
     DiskLook L = LOOK_DEFAULT;
@@ -251,7 +255,7 @@ void main() {
         float idle = max(0.0, uTime - uLastActivity);
         I *= 1.0 - smoothstep(IDLE_FADE_SEC, max(BREAK_MIN * 60.0, IDLE_FADE_SEC + 1.0), idle);
         sz = mix(0.22, 1.0, I);
-        float ext = (rout / B_CRIT) * HOLE_RADIUS * sz;
+        float ext = (rout / B_CRIT) * HOLE_RADIUS * sz * SIZE_GAIN;
         float yLo = WORK_AREA + 0.12 + ext;
         float yHi = max(yLo, 0.90 - ext);
         float spd = mix(0.35, 1.0, I);
@@ -272,7 +276,7 @@ void main() {
         I = mix(0.10, 1.0, g);
         float rhMin = sqrt(TOKEN_AREA_MIN * aspect / 3.1415927);
         float rhMax = sqrt(TOKEN_AREA_MAX * aspect / 3.1415927);
-        float rhT = mix(rhMin, rhMax, g) * (HOLE_RADIUS / 0.08);
+        float rhT = mix(rhMin, rhMax, g) * (HOLE_RADIUS / 0.08) * SIZE_GAIN;
         sz = rhT / max(HOLE_RADIUS, 1e-4);
         float marg = min(rhT * mix(1.45, 0.90, g), 0.5 * (1.0 - WORK_AREA - 0.03));
         float xPad = marg / aspect;
@@ -296,7 +300,7 @@ void main() {
         fragColor = vec4(0.0);
         return;
     }
-    float rh = HOLE_RADIUS * sz;
+    float rh = HOLE_RADIUS * sz * SIZE_GAIN;
     float dil = mix(1.0, DILATION_MIN, I);
     // Overlay model: the canvas is transparent except near the hole, so the
     // live Obsidian DOM shows through everywhere else. "shield" is the effect
@@ -312,30 +316,36 @@ void main() {
     float b  = length(pr);
 
     float window = exp(-pow(plen / (7.0 * rh), 2.0));
+    float cover = window * shield;
+    if (cover < ALPHA_EPS) {
+        fragColor = vec4(0.0);
+        return;
+    }
 
     float bmax = rout + 3.0;
     float Z0   = max(14.0, rout + 5.0);
 
     // far field
     if (b >= bmax) {
-        float uu   = Z0 * inversesqrt(Z0 * Z0 + b * b);
-        float defl = (2.0 / (W * W)) / max(plen, 1e-4)
-                   * (1.29 * uu + 0.07) * max(LENS_DEPTH - 2.14 * uu + 0.75, 0.0)
-                   * window * shield;
-        vec2  dir  = p / max(plen, 1e-5);
-        vec3  term;
-        float ab = 0.035 * smoothstep(1.0, 2.0, b / bmax);
-        for (int i = 0; i < 3; i++) {
-            float k   = 1.0 + (float(i) - 1.0) * ab;
-            vec2  sp  = p - dir * defl * k;
-            vec2  suv = mirrorUV(center + sp / vec2(aspect, 1.0));
-            term[i]   = texture(uTexture, suv)[i];
+        vec3  term = vec3(0.0);
+        if (uCaptureEnabled != 0) {
+            float uu   = Z0 * inversesqrt(Z0 * Z0 + b * b);
+            float defl = (2.0 / (W * W)) / max(plen, 1e-4)
+                       * (1.29 * uu + 0.07) * max(LENS_DEPTH - 2.14 * uu + 0.75, 0.0)
+                       * cover;
+            vec2  dir  = p / max(plen, 1e-5);
+            vec2  sp   = p - dir * defl;
+            vec2  suv  = mirrorUV(center + sp / vec2(aspect, 1.0));
+            term = texture(uTexture, suv).rgb;
         }
-        vec3 dd = normalize(vec3(-(pr / b) * (2.0 / b), -1.0));
-        vec3 sky = stars(dd) * L.star * window * shield;
+        vec3 sky = vec3(0.0);
+        if (L.star > 0.0) {
+            vec3 dd = normalize(vec3(-(pr / b) * (2.0 / b), -1.0));
+            sky = stars(dd) * L.star * cover;
+        }
         // straight-alpha overlay: coverage fades out away from the hole so the
         // live DOM shows through; near the hole we reveal the lensed sample.
-        float a = clamp(window * shield, 0.0, 1.0);
+        float a = clamp(cover, 0.0, 1.0);
         fragColor = vec4(term + sky, a);
         return;
     }
@@ -409,13 +419,15 @@ void main() {
     vec3 bg = vec3(0.0);
     if (!captured) {
         vec3 dd = normalize(v);
-        bg += stars(dd) * L.star * window * shield;
-        if (dd.z < -0.05) {
+        if (L.star > 0.0) {
+            bg += stars(dd) * L.star * cover;
+        }
+        if (uCaptureEnabled != 0 && dd.z < -0.05) {
             float tpl = (-LENS_DEPTH - x.z) / dd.z;
             vec3  hp  = x + dd * tpl;
             vec2  q   = rot(hp.xy, -L.roll) / W;
             vec2  sp  = vec2(q.x, -q.y);
-            vec2  suv = mirrorUV(center + (p + (sp - p) * window * shield) / vec2(aspect, 1.0));
+            vec2  suv = mirrorUV(center + (p + (sp - p) * cover) / vec2(aspect, 1.0));
             float toward = smoothstep(0.05, 0.35, -dd.z);
             bg += texture(uTexture, suv).rgb * toward;
         }
@@ -426,7 +438,7 @@ void main() {
     vec3 col = bg * trans + emitRGB;
     // Coverage: opaque inside the shadow, bright where the disk emits, and the
     // lensing window elsewhere — transparent (live DOM) far from the hole.
-    float a = captured ? 1.0 : clamp(max(window * shield, emitLum), 0.0, 1.0);
+    float a = captured ? 1.0 : clamp(max(cover, emitLum), 0.0, 1.0);
     fragColor = vec4(col, a);
 }
 `;

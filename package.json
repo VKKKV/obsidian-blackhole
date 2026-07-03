@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node esbuild.config.js production",
     "dev": "node esbuild.config.js",
-    "harness": "node esbuild.config.js harness"
+    "harness": "node esbuild.config.js harness",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "Kita",

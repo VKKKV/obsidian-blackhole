@@ -2,14 +2,14 @@
    except where the hole renders. pointer-events:none keeps the UI clickable. */
 .blackhole-canvas {
   position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
+  left: 0;
+  top: 0;
   pointer-events: none;
   /* Float above workspace/sidebars but below modals & menus. */
   z-index: 90;
   opacity: 1;
   transition: opacity 0.3s ease;
+  will-change: transform;
 }
 
 /* Hide canvas when plugin is off via class */

@@ -4,7 +4,16 @@ import {
 } from './settings';
 import { BlackHoleRenderer } from './renderer';
 import { WorkspaceCapture } from './capture';
+import { PluginLanguage, t as translate, TranslationKey } from './i18n';
 import { ShaderParams } from './shader';
+
+const MAX_RENDER_SCALE = 0.35;
+const MAX_RENDER_SCALE_SOFTWARE = 0.22;
+const MAX_SHADER_STEPS = 10;
+const MAX_HOLE_RADIUS = 0.014;
+const MAX_TOKEN_AREA_MIN = 0.003;
+const MAX_TOKEN_AREA_MAX = 0.02;
+const MAX_DISK_OUTER = 7.0;
 
 export default class BlackHolePlugin extends Plugin {
   settings: BlackHoleSettings = { ...DEFAULT_SETTINGS };
@@ -18,19 +27,18 @@ export default class BlackHolePlugin extends Plugin {
   private metricIntervalId: number = 0;
   private leafChangeRef: EventRef | null = null;
   private layoutChangeRef: EventRef | null = null;
-  private lastUploadTime = 0;
-  private lastWordCountLen = -1;
-  private lastWordCountResult = 0;
+  private idleResumeTimeoutId: number = 0;
+  private playbackSuspended = false;
 
   async onload() {
     await this.loadSettings();
     this.addSettingTab(new BlackHoleSettingsTab(this.app, this));
 
-    this.addRibbonIcon('circle-dot', 'Toggle Black Hole', () => {
+    this.addRibbonIcon('circle-dot', this.t('ribbon.toggle'), () => {
       this.enabled = !this.enabled;
       if (this.enabled) this.start();
       else this.stop();
-      new Notice(`Black hole ${this.enabled ? 'ON' : 'OFF'}`);
+      new Notice(this.enabled ? this.t('notice.enabled') : this.t('notice.disabled'));
     });
 
     // Defer the first start until the workspace DOM is laid out — querying or
@@ -50,7 +58,7 @@ export default class BlackHolePlugin extends Plugin {
       this.startInternal();
     } catch (e) {
       console.error('BlackHole: failed to start.', e);
-      new Notice('Black Hole failed to start — see console for details.');
+      new Notice(this.t('notice.startFailed'));
       this.stop();
       this.enabled = false;
     }
@@ -72,7 +80,7 @@ export default class BlackHolePlugin extends Plugin {
     this.renderer = new BlackHoleRenderer(canvas, this.toShaderParams());
     if (!this.renderer.init()) {
       console.error('BlackHole: WebGL2 not available');
-      new Notice('Black Hole plugin requires WebGL2');
+      new Notice(this.t('notice.requireWebgl2'));
       canvas.remove();
       this.renderer = null;
       this.canvas = null;
@@ -80,17 +88,22 @@ export default class BlackHolePlugin extends Plugin {
     }
 
     // init capture
-    this.capture = new WorkspaceCapture();
-    this.capture.setElement(this.findCaptureTarget());
+    const capture = new WorkspaceCapture();
+    capture.setElement(this.findCaptureTarget());
+    capture.onCapture = (canvas) => {
+      if (this.capture !== capture || !this.renderer) return;
+      this.renderer.updateTexture(canvas);
+    };
+    this.capture = capture;
     // blank initial texture
     const blank = WorkspaceCapture.blankCanvas(window.innerWidth, window.innerHeight);
     this.renderer.updateTexture(blank);
+    this.lastActivity = performance.now();
 
     // apply perf settings; if no GPU (software renderer), drop quality so the
     // heavy geodesic shader doesn't freeze the UI.
-    if (this.renderer.softwareRenderer && this.settings.renderScale > 0.6) {
-      this.renderer.setRenderScale(0.5);
-      new Notice('Black Hole: no GPU acceleration detected — quality reduced. Tune it under Settings → Performance.');
+    if (this.renderer.softwareRenderer && this.settings.renderScale >= 0.5) {
+      new Notice(this.t('notice.softwareReduced'));
     }
     this.applyRuntimeSettings();
 
@@ -99,11 +112,12 @@ export default class BlackHolePlugin extends Plugin {
 
     // wire state
     this.renderer.sizeMode = this.settings.sizeMode;
-    this.renderer.lastActivity = performance.now() / 1000;
-    this.lastActivity = performance.now();
+    this.renderer.lastActivity = this.lastActivity / 1000;
+    this.renderer.tokenLevel = this.computeTokenLevel();
 
     // start rendering
     this.renderer.start();
+    this.syncPlaybackGate();
 
     // activity tracking
     document.addEventListener('keydown', this.activityHandler);
@@ -113,18 +127,12 @@ export default class BlackHolePlugin extends Plugin {
 
     // Capture poll. dom-to-image is heavy and main-thread, so we DON'T capture
     // every frame — the GPU animates the lens against the last snapshot. This
-    // poll just checks whether a fresh capture is due (capture() self-throttles
-    // to the configured interval) and uploads any new result.
+    // poll just checks whether a fresh capture is due; completed captures push
+    // their canvas back through WorkspaceCapture.onCapture.
     this.captureIntervalId = window.setInterval(() => {
       try {
-        if (!this.renderer || !this.capture) return;
+        if (!this.renderer || !this.capture || this.playbackSuspended) return;
         this.capture.capture(performance.now());
-        // upload only when there's a genuinely new capture
-        const cap = this.capture.latestCanvas;
-        if (cap && this.capture.latestCaptureTime !== this.lastUploadTime) {
-          this.lastUploadTime = this.capture.latestCaptureTime;
-          this.renderer.updateTexture(cap);
-        }
       } catch (e) {
         console.error('BlackHole: capture tick failed.', e);
       }
@@ -133,7 +141,7 @@ export default class BlackHolePlugin extends Plugin {
     // metric polling for token mode
     this.metricIntervalId = window.setInterval(() => {
       try {
-        if (!this.renderer || this.settings.sizeMode !== 1) return;
+        if (!this.renderer || this.settings.sizeMode !== 1 || this.playbackSuspended) return;
         this.renderer.tokenLevel = this.computeTokenLevel();
       } catch (e) {
         console.error('BlackHole: metric tick failed.', e);
@@ -168,8 +176,11 @@ export default class BlackHolePlugin extends Plugin {
     }
     window.clearInterval(this.captureIntervalId);
     window.clearInterval(this.metricIntervalId);
+    window.clearTimeout(this.idleResumeTimeoutId);
     this.captureIntervalId = 0;
     this.metricIntervalId = 0;
+    this.idleResumeTimeoutId = 0;
+    this.playbackSuspended = false;
 
     document.removeEventListener('keydown', this.activityHandler);
     document.removeEventListener('mousedown', this.activityHandler);
@@ -185,6 +196,7 @@ export default class BlackHolePlugin extends Plugin {
     if (!this.renderer) return;
     // sizeMode is a uniform, not a baked const — no recompile needed.
     this.renderer.sizeMode = this.settings.sizeMode;
+    this.renderer.tokenLevel = this.computeTokenLevel();
     this.capture?.reset();
   }
 
@@ -199,11 +211,18 @@ export default class BlackHolePlugin extends Plugin {
 
   /** Apply non-shader runtime settings (render scale, capture cadence). */
   applyRuntimeSettings() {
-    this.renderer?.setRenderScale(this.settings.renderScale);
+    if (this.renderer) {
+      this.renderer.captureEnabled = this.settings.captureEnabled;
+      const effectiveScale = this.renderer.softwareRenderer
+        ? Math.min(this.settings.renderScale, MAX_RENDER_SCALE_SOFTWARE)
+        : Math.min(this.settings.renderScale, MAX_RENDER_SCALE);
+      this.renderer.setRenderScale(effectiveScale);
+    }
     this.capture?.setOptions({
       enabled: this.settings.captureEnabled,
-      intervalMs: this.settings.captureIntervalMs,
+      intervalMs: Math.max(this.settings.captureIntervalMs, 2500),
     });
+    this.syncPlaybackGate();
   }
 
   private recompileSoon = debounce(() => {
@@ -222,15 +241,21 @@ export default class BlackHolePlugin extends Plugin {
   private async loadSettings() {
     const data = await this.loadData();
     if (data) this.settings = { ...DEFAULT_SETTINGS, ...data };
+    const changed = this.normalizeSettings();
+    if (changed) await this.saveSettings();
+  }
+
+  t(key: TranslationKey): string {
+    return translate(this.settings.language as PluginLanguage, key);
   }
 
   toShaderParams(): ShaderParams {
     return {
-      holeRadius: this.settings.holeRadius,
+      holeRadius: Math.min(this.settings.holeRadius, MAX_HOLE_RADIUS),
       lensDepth: this.settings.lensDepth,
       starGain: this.settings.starGain,
       diskInner: this.settings.diskInner,
-      diskOuter: this.settings.diskOuter,
+      diskOuter: Math.min(this.settings.diskOuter, MAX_DISK_OUTER),
       diskIncl: this.settings.diskIncl,
       diskRoll: this.settings.diskRoll,
       diskGain: this.settings.diskGain,
@@ -245,15 +270,15 @@ export default class BlackHolePlugin extends Plugin {
       driftSpeed: this.settings.driftSpeed,
       workArea: this.settings.workArea,
       dilationMin: this.settings.dilationMin,
-      tokenAreaMin: this.settings.tokenAreaMin,
-      tokenAreaMax: this.settings.tokenAreaMax,
+      tokenAreaMin: Math.min(this.settings.tokenAreaMin, MAX_TOKEN_AREA_MIN),
+      tokenAreaMax: Math.min(this.settings.tokenAreaMax, MAX_TOKEN_AREA_MAX),
       tokenHomeX: this.settings.tokenHomeX,
       tokenHomeY: this.settings.tokenHomeY,
       tokenEase: this.settings.tokenEase,
       tokenReach: this.settings.tokenReach,
       tokenCalm: this.settings.tokenCalm,
       tokenRush: this.settings.tokenRush,
-      nSteps: this.settings.nSteps,
+      nSteps: Math.min(this.settings.nSteps, MAX_SHADER_STEPS),
       workPeriodMin: this.settings.workPeriodMin,
       breakMin: this.settings.breakMin,
       idleFadeSec: this.settings.idleFadeSec,
@@ -263,10 +288,67 @@ export default class BlackHolePlugin extends Plugin {
     };
   }
 
+  private normalizeSettings(): boolean {
+    const before = JSON.stringify(this.settings);
+    this.settings.holeRadius = Math.min(this.settings.holeRadius, MAX_HOLE_RADIUS);
+    this.settings.tokenAreaMin = Math.min(this.settings.tokenAreaMin, MAX_TOKEN_AREA_MIN);
+    this.settings.tokenAreaMax = Math.min(this.settings.tokenAreaMax, MAX_TOKEN_AREA_MAX);
+    this.settings.diskOuter = Math.min(this.settings.diskOuter, MAX_DISK_OUTER);
+    this.settings.nSteps = Math.min(this.settings.nSteps, MAX_SHADER_STEPS);
+    this.settings.renderScale = Math.min(this.settings.renderScale, MAX_RENDER_SCALE);
+    this.settings.captureIntervalMs = Math.max(this.settings.captureIntervalMs, 2500);
+    this.settings.idlePlaybackDelaySec = Math.max(this.settings.idlePlaybackDelaySec, 5);
+    return JSON.stringify(this.settings) !== before;
+  }
+
   private activityHandler = () => {
     this.lastActivity = performance.now();
     if (this.renderer) this.renderer.lastActivity = this.lastActivity / 1000;
+    if (this.settings.idlePlaybackEnabled) {
+      this.setPlaybackSuspended(true);
+      this.scheduleIdleResume();
+    }
   };
+
+  private scheduleIdleResume() {
+    window.clearTimeout(this.idleResumeTimeoutId);
+    if (!this.settings.idlePlaybackEnabled) return;
+    const delayMs = this.settings.idlePlaybackDelaySec * 1000;
+    this.idleResumeTimeoutId = window.setTimeout(() => {
+      const idleFor = performance.now() - this.lastActivity;
+      if (idleFor >= delayMs) this.setPlaybackSuspended(false);
+    }, delayMs);
+  }
+
+  private syncPlaybackGate() {
+    if (!this.renderer) return;
+    if (!this.settings.idlePlaybackEnabled) {
+      window.clearTimeout(this.idleResumeTimeoutId);
+      this.setPlaybackSuspended(false);
+      return;
+    }
+
+    const delayMs = this.settings.idlePlaybackDelaySec * 1000;
+    const idleFor = performance.now() - this.lastActivity;
+    if (idleFor >= delayMs) this.setPlaybackSuspended(false);
+    else {
+      this.setPlaybackSuspended(true);
+      this.scheduleIdleResume();
+    }
+  }
+
+  private setPlaybackSuspended(suspended: boolean) {
+    if (this.playbackSuspended === suspended) return;
+    this.playbackSuspended = suspended;
+    this.canvas?.classList.toggle('hidden', suspended);
+    if (!this.renderer) return;
+    if (suspended) {
+      this.renderer.stop();
+      return;
+    }
+    this.capture?.requestSoon();
+    this.renderer.start();
+  }
 
   private computeTokenLevel(): number {
     if (this.settings.sizeMode !== 1) return -1;
@@ -276,12 +358,8 @@ export default class BlackHolePlugin extends Plugin {
           const mdView = this.app.workspace.getActiveViewOfType(MarkdownView);
           if (!mdView) return -1;
           const text: string = mdView.editor?.getValue() ?? '';
-          // skip recomputation if content length hasn't changed (cheap O(1) check)
-          if (text.length === this.lastWordCountLen) return this.lastWordCountResult;
-          this.lastWordCountLen = text.length;
-          const words = text.split(/\s+/).filter((w: string) => w.length > 0).length;
-          this.lastWordCountResult = Math.min(words / this.settings.maxWordCount, 1.0);
-          return this.lastWordCountResult;
+          const words = text.match(/\S+/g)?.length ?? 0;
+          return Math.min(words / this.settings.maxWordCount, 1.0);
         }
         case 'global-word-count': {
           const files = this.app.vault.getMarkdownFiles();
