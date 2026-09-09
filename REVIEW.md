@@ -13,7 +13,7 @@ Reviewed revision: `72d4d804ae70e28bd854e42473a7c8e84ee068dc`.
 
 These are reproducible defects, not proof of the unique cause of a particular Obsidian freeze. No real vault or running Obsidian instance was accessed.
 
-## Implemented boundaries
+## Initial anti-freeze refactor boundaries (8728525)
 
 Startup and recompile are asynchronous and generation-guarded. Idle-only playback and document visibility gate initial GPU initialization, rendering and capture. A context loss or fatal renderer error stops the session instead of continuing to draw. Software WebGL is rejected before shader compilation in the plugin; only the isolated shader playground/tests may explicitly opt into it.
 
@@ -46,6 +46,36 @@ The root `main.js` is intentionally NOT rebuilt during this review, because the 
 - Real DOM capture smoke passes: a scrolled text fixture captures the visible blue text (not the offscreen red text), and preserves its opaque `[220,220,220,255]` background.
 - Adversarial review found an init-continuation resource resurrection, stripped background colors and an inverted token-area setting. New tests reproduced the first two before patching; the final suite covers all three.
 - Production bundle builds into an isolated output directory; `git diff --check` passes. Root `main.js` remains the pre-refactor artifact deliberately, not an updated plugin.
+
+## Visual follow-up
+
+User manually confirmed the initial refactor no longer froze Obsidian, then
+reported a tiny effect, apparent flicker and missing reset. The follow-up uses
+upstream shader parameters/formulas from `s0xDk/ghostty-blackhole` commit
+`b49fa0ab2eaf0644a690f4cb386d70c21eb9f969`, choosing its 42-second Demo tour for
+fresh/reset installs rather than the upstream Claude-driven Token default.
+
+- Removed hard size/area clamps and the double 0.55 radius attenuation.
+- Disable desynchronized presentation, defer resize/scale mutations to the next
+  draw, reuse crop dimensions and align its origin to backing pixels. Keep
+  preserveDrawingBuffer=false: late readPixels can be empty while the compositor
+  still displays the previous frame; actual screenshots verify retention.
+- Target 60 FPS on hardware; cap backing pixels at 262,144 and poll a GPU fence
+  without waiting, so increased visual size does not create an unbounded GPU queue.
+- Add one-click reset with preserved language/on-off state; old untouched tiny
+  settings migrate, customized configurations remain available.
+- Follow-up validation: 29 Node regressions and TypeScript pass; real Chromium
+  WebGL, capture and full-tour sampling pass. The 1000×700 fixture grows its
+  shadow diameter from 23.6 to 166.9 CSS pixels while staying under the backing
+  pixel budget. The test's RAF timing describes that isolated environment, not
+  guaranteed plugin FPS on the user's GPU.
+- Final independent diff review found no confirmed high-risk remainder; it also
+  checked 35 viewport/scale combinations, zero-size recovery and GPU fence transitions.
+- Independent geometry tests compare the upstream radius formula. Real Chromium
+  animation tests sample the full tour and check nonblank presentation after RAF
+  and resize invalidation. Twelve successive presented screenshots remain identical
+  without drawing or clearing the bitmap. These checks do not prove universal
+  smoothness in Electron. The upstream tour intentionally resets every 42 seconds.
 
 ## Remaining acceptance work
 

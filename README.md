@@ -35,6 +35,26 @@ GPU.
 - **Gravitational time dilation** — the disk's inner orbits visibly freeze as
   the hole grows heavier.
 
+## Default animation and reset
+
+Fresh installs use the upstream 42-second **Demo** tour, so the effect works
+without note text or a Claude token signal. The Inferno look and size formula
+follow [ghostty-blackhole at b49fa0a](https://github.com/s0xDk/ghostty-blackhole/blob/b49fa0ab2eaf0644a690f4cb386d70c21eb9f969/blackhole.glsl):
+hole radius 0.02, disk outer radius 8, token area range 0.01–0.5, with no extra
+size attenuation. The upstream default mode itself is Token; this plugin chooses
+its self-running Demo for the requested out-of-box animation. The tour intentionally
+returns to a small seed every 42 seconds, as upstream does.
+
+Settings → Black Hole → **Restore defaults** restores the animation and performance
+parameters, keeps language and the on/off switch, and turns workspace capture off.
+Old untouched tiny defaults are migrated; customized settings are preserved—use
+Restore defaults to switch those to the new showcase.
+
+The overlay is an adaptation, not pixel-identical to Ghostty: it uses transparent
+composition, optional approximate DOM capture, a pixel budget and 64 rather than
+48 integration steps. Normal compositor presentation, deferred resize and stable crop dimensions
+avoid blank presentations between draws. Hardware FPS still depends on the GPU.
+
 ## Size modes
 
 What drives the hole's growth is selected in settings:
@@ -82,7 +102,7 @@ you control over every shader tunable:
 ## How it works
 
 The plugin mounts a dynamically cropped `<canvas>` overlay with `pointer-events: none`,
-so it never intercepts clicks. A **WebGL2** render loop targets 18 FPS on a cropped effect canvas, executing the same GLSL shader used by the original Ghostty version —
+so it never intercepts clicks. A **WebGL2** render loop targets 60 FPS on a cropped effect canvas, executing the same GLSL shader used by the original Ghostty version —
 except the final output uses straight alpha, so the canvas is transparent away
 from the hole and your live notes show through:
 
@@ -101,9 +121,10 @@ black-hole/disk/starfield rendering without a workspace texture. Capture filters
 media and resource styles, so it is an approximate text/layout snapshot.
 
 The plugin rejects software WebGL before compiling the effect. On hardware it
-uses 64 integration steps by default, a cropped canvas and an effective render
-scale capped at 0.35 (minimum 0.15). Stored preferences remain separate from this
-runtime budget. Reducing integration to 6–10 steps is not a supported performance
+uses 64 integration steps by default and a cropped canvas with a maximum
+262,144 backing pixels. The requested render scale defaults to 0.75; the pixel
+budget reduces actual resolution on large windows without shrinking the effect.
+GPU fences prevent queued frames from accumulating. Reducing integration to 6–10 steps is not a supported performance
 mode: it prevents representative rays from reaching the black hole.
 
 ## Development
@@ -121,7 +142,9 @@ The **harness** renders the shader over mock "notes" in a plain browser page
 with live param sliders, so you can iterate on the shader (the bulk of the
 work) without launching Obsidian. The playground explicitly permits software WebGL for
 testing, unlike the plugin. Its procedural texture is not a screenshot of the DOM.
-Optional real-WebGL tests: `python tests/webgl_smoke.py` (Python Playwright required).
+Optional real-WebGL tests: `python tests/webgl_smoke.py` and
+`python tests/animation_smoke.py` (Python Playwright and Pillow required). The animation test
+saves sampled screenshots and compositor-retention checks under `/tmp/blackhole-animation-artifacts`.
 
 ## License
 

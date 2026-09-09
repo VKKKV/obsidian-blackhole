@@ -7,10 +7,10 @@ const DEMO_SEC = 42;
 const DEMO_GROW_SEC = 40;
 const B_CRIT = 2.5980762;
 const EFFECT_ALPHA_CUTOFF = 0.01;
-const SIZE_GAIN = 0.55;
+const MAX_RENDER_PIXELS = 262_144;
 const VIEWPORT_PAD_PX = 24;
 const VIEWPORT_SNAP_PX = 32;
-const DEFAULT_FRAME_INTERVAL_MS = 1000 / 18;
+const DEFAULT_FRAME_INTERVAL_MS = 1000 / 60;
 const SOFTWARE_FRAME_INTERVAL_MS = 1000 / 10;
 
 type EffectBounds = {
@@ -69,6 +69,10 @@ export class BlackHoleRenderer {
   // uniform locations
   private uResolution!: WebGLUniformLocation;
   private uTime!: WebGLUniformLocation;
+  private uDemoTime!: WebGLUniformLocation;
+  private readonly demoStart = performance.now() / 1000;
+  private gpuFence: WebGLSync | null = null;
+  private fenceCreatedAt = 0;
   private uTexture!: WebGLUniformLocation;
   private uSizeMode!: WebGLUniformLocation;
   private uCaptureEnabled!: WebGLUniformLocation;
@@ -90,13 +94,13 @@ export class BlackHoleRenderer {
   public autoQuality = true;
   /** Backing-store resolution factor (CSS px × this). The canvas is stretched
    *  to 100% via CSS, so < 1 renders fewer fragments — a big GPU win. */
-  public renderScale = 0.35;
+  public renderScale = 0.75;
   private readonly minRenderScale = 0.15;
   private dtAvg = 0;            // EMA of frame time (s)
   private lastScaleAdjust = 0;  // timestamp guard for auto-downscale
 
   private prevTime = 0;
-  private lastDrawTime = 0;
+  private nextDrawTime = 0;
   private startTime = 0;
   private frameIntervalMs = DEFAULT_FRAME_INTERVAL_MS;
   private viewportRect: EffectBounds | null = null;
@@ -127,8 +131,9 @@ export class BlackHoleRenderer {
       // Ask the OS/Electron for the discrete/high-performance GPU rather than
       // an integrated or software fallback — the geodesic shader is heavy.
       powerPreference: 'high-performance',
-      // Let the compositor present without forcing main-thread sync each frame.
-      desynchronized: true,
+      // Normal compositor presentation retains the last image between draws;
+      // low-latency desynchronized scanout can expose clears on some drivers.
+      desynchronized: false,
     });
     if (!gl) { this.lastError = 'WebGL2 context unavailable.'; return false; }
     this.gl = gl;
@@ -136,7 +141,7 @@ export class BlackHoleRenderer {
 
     // Report which GPU we actually got. If Electron handed us a software
     // rasterizer (SwiftShader / llvmpipe), the shader will be unusably slow —
-    // flag it so we can drop quality automatically.
+    // reject it before compiling the heavy shader in the production plugin.
     try {
       const dbg = gl.getExtension('WEBGL_debug_renderer_info');
       const rendererName = dbg
@@ -201,7 +206,7 @@ export class BlackHoleRenderer {
     this.running = true;
     this.prevTime = performance.now();
     this.dtAvg = 0;
-    this.lastDrawTime = 0;
+    this.nextDrawTime = 0;
     this.startTime = this.prevTime;
     this.animId = requestAnimationFrame(this.loop);
   }
@@ -223,16 +228,16 @@ export class BlackHoleRenderer {
 
   resize() {
     if (!this.gl) return;
+    // Invalidate geometry only; clearing the backing store here produces a blank
+    // frame before the next RAF (ResizeObserver runs after RAF).
     this.viewportRect = null;
-    this.updateViewportRect({ x: 0, y: 0, width: 1, height: 1 });
   }
 
-  /** Set the backing-store resolution factor and re-size immediately. */
+  /** Request a backing-store scale change for the next complete draw. */
   setRenderScale(scale: number) {
     if (!Number.isFinite(scale)) return;
     this.renderScale = Math.max(this.minRenderScale, Math.min(1, scale));
-    if (this.viewportRect) this.updateViewportRect(this.viewportRect);
-    else this.resize();
+    // The next draw applies the backing-store change atomically with new pixels.
   }
 
   getSize(): { width: number; height: number } {
@@ -246,6 +251,8 @@ export class BlackHoleRenderer {
     this.canvas.removeEventListener('webglcontextlost', this.contextLost);
     this.resizeObserver.disconnect();
     const gl = this.gl;
+    if (gl && this.gpuFence) gl.deleteSync(this.gpuFence);
+    this.gpuFence = null;
     if (gl && this.program) gl.deleteProgram(this.program);
     if (gl && this.vao) gl.deleteVertexArray(this.vao);
     if (gl && this.vertexBuffer) gl.deleteBuffer(this.vertexBuffer);
@@ -309,6 +316,7 @@ export class BlackHoleRenderer {
     // locate uniforms
     this.uResolution = gl.getUniformLocation(prog, 'uResolution')!;
     this.uTime = gl.getUniformLocation(prog, 'uTime')!;
+    this.uDemoTime = gl.getUniformLocation(prog, 'uDemoTime')!;
     this.uTexture = gl.getUniformLocation(prog, 'uTexture')!;
     this.uSizeMode = gl.getUniformLocation(prog, 'uSizeMode')!;
     this.uCaptureEnabled = gl.getUniformLocation(prog, 'uCaptureEnabled')!;
@@ -331,11 +339,35 @@ export class BlackHoleRenderer {
   private loop = (now: number) => {
     if (!this.running || !this.gl || !this.program) return;
     this.animId = requestAnimationFrame(this.loop);
-    if (this.lastDrawTime && now - this.lastDrawTime < this.frameIntervalMs) return;
+    if (now + 0.5 < this.nextDrawTime) return;
+    // Never queue multiple expensive frames while the GPU is still rendering.
+    // Timeout zero polls completion without blocking the editor thread.
+    if (this.gpuFence) {
+      const gl = this.gl;
+      const status = gl.clientWaitSync(this.gpuFence, 0, 0);
+      if (status === gl.TIMEOUT_EXPIRED) {
+        if (now - this.fenceCreatedAt > 2000) {
+          this.stop();
+          this.onFatalError?.('GPU frame exceeded the 2s safety budget.');
+        }
+        return;
+      }
+      gl.deleteSync(this.gpuFence);
+      this.gpuFence = null;
+      if (status === gl.WAIT_FAILED) {
+        this.stop();
+        this.onFatalError?.('GPU frame synchronization failed.');
+        return;
+      }
+    }
 
     try {
       this.renderFrame(now);
-      this.lastDrawTime = now;
+      // Advance a deadline, not a floating-point modulo of the last timestamp.
+      // No catch-up draws: after a stall only the next future slot is scheduled.
+      this.nextDrawTime = this.nextDrawTime
+        ? this.nextDrawTime + Math.max(1, Math.floor((now + 0.5 - this.nextDrawTime) / this.frameIntervalMs) + 1) * this.frameIntervalMs
+        : now + this.frameIntervalMs;
     } catch (e) {
       // A throw here would otherwise fire as an uncaught error every frame.
       // Log it once and stop the loop rather than spam the console.
@@ -350,12 +382,11 @@ export class BlackHoleRenderer {
     const dt = Math.min((now - this.prevTime) / 1000, 1);
     this.prevTime = now;
 
-    // Compare actual draw cadence with the intended cadence, not a fixed
-    // 30 FPS threshold that penalizes our own 18 FPS throttle.
+    // Adapt only for sustained misses; a 30 Hz display is not a GPU failure.
     const targetSeconds = this.frameIntervalMs / 1000;
     this.dtAvg = this.dtAvg ? this.dtAvg * 0.9 + dt * 0.1 : dt;
     if (this.autoQuality && this.viewportRect && now - this.startTime > 3000
-        && this.dtAvg > targetSeconds * 1.8 && now - this.lastScaleAdjust > 2000) {
+        && this.dtAvg > Math.max(0.05, targetSeconds * 1.8) && now - this.lastScaleAdjust > 2000) {
       this.lastScaleAdjust = now;
       if (this.renderScale > this.minRenderScale) this.setRenderScale(this.renderScale - 0.05);
       else {
@@ -386,6 +417,7 @@ export class BlackHoleRenderer {
     }
 
     const viewportRect = this.ensureViewportRect(bounds, viewportSize.width, viewportSize.height);
+    this.updateViewportRect(viewportRect);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     gl.uniform2f(this.uResolution, viewportSize.width, viewportSize.height);
@@ -399,7 +431,8 @@ export class BlackHoleRenderer {
       viewportRect.width / viewportSize.width,
       viewportRect.height / viewportSize.height,
     );
-    gl.uniform1f(this.uTime, now / 1000);
+    gl.uniform1f(this.uTime, this.sizeMode === MODE_DEMO ? Math.max(0, now / 1000 - this.demoStart) : now / 1000);
+    gl.uniform1f(this.uDemoTime, Math.max(0, now / 1000 - this.demoStart));
 
     gl.uniform1i(this.uSizeMode, this.sizeMode);
     gl.uniform1i(this.uCaptureEnabled, this.captureEnabled ? 1 : 0);
@@ -408,6 +441,10 @@ export class BlackHoleRenderer {
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
+    if (this.gpuFence) gl.deleteSync(this.gpuFence);
+    this.gpuFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    this.fenceCreatedAt = now;
+    gl.flush();
   }
 
   private computeEffectBounds(
@@ -440,7 +477,7 @@ export class BlackHoleRenderer {
       );
       size = mix(0.22, 1.0, intensity);
       const diskOuter = Math.max(p.diskOuter, Math.max(p.diskInner, 1.6) + 0.5);
-      const ext = (diskOuter / B_CRIT) * holeRadius * size * SIZE_GAIN;
+      const ext = (diskOuter / B_CRIT) * holeRadius * size;
       const yLo = p.workArea + 0.12 + ext;
       const yHi = Math.max(yLo, 0.90 - ext);
       const speed = mix(0.35, 1.0, intensity);
@@ -459,14 +496,14 @@ export class BlackHoleRenderer {
       };
     } else {
       const level = this.sizeMode === MODE_DEMO
-        ? Math.min(positiveMod(nowSec, DEMO_SEC) / DEMO_GROW_SEC, 1.0)
+        ? Math.min(positiveMod(Math.max(0, nowSec - this.demoStart), DEMO_SEC) / DEMO_GROW_SEC, 1.0)
         : this.glidedToken(nowSec);
       if (level < 0) return null;
       const g = Math.pow(clamp(level, 0, 1), p.tokenEase);
       intensity = mix(0.10, 1.0, g);
       const rhMin = Math.sqrt((p.tokenAreaMin * aspect) / Math.PI);
       const rhMax = Math.sqrt((p.tokenAreaMax * aspect) / Math.PI);
-      const rhT = mix(rhMin, rhMax, g) * (holeRadius / 0.08) * SIZE_GAIN;
+      const rhT = mix(rhMin, rhMax, g) * (holeRadius / 0.08);
       size = rhT / holeRadius;
       const margin = Math.min(rhT * mix(1.45, 0.90, g), 0.5 * (1.0 - p.workArea - 0.03));
       const xPad = margin / aspect;
@@ -494,7 +531,7 @@ export class BlackHoleRenderer {
         x: Math.max(room.x - wobble.x, 0),
         y: Math.max(room.y - wobble.y, 0),
       };
-      const t = nowSec * p.driftSpeed;
+      const t = (this.sizeMode === MODE_DEMO ? Math.max(0, nowSec - this.demoStart) : nowSec) * p.driftSpeed;
       const calm = lissa(t * p.tokenCalm);
       const rush = lissa(t * p.tokenRush);
       const wander = {
@@ -510,7 +547,7 @@ export class BlackHoleRenderer {
     const shield = smoothstep(0.0, 0.10, intensity);
     if (shield <= 0) return null;
 
-    const rh = holeRadius * size * SIZE_GAIN;
+    const rh = holeRadius * size;
     this.effectState = { x: center.x, y: center.y, radius: rh, intensity };
     const effectRadius = Math.max(
       rh * 3,
@@ -542,41 +579,43 @@ export class BlackHoleRenderer {
     viewportWidth: number,
     viewportHeight: number,
   ): EffectBounds {
-    const pad = VIEWPORT_PAD_PX;
-    const snap = VIEWPORT_SNAP_PX;
-    const x0 = clamp(Math.floor((bounds.x - pad) / snap) * snap, 0, viewportWidth);
-    const y0 = clamp(Math.floor((bounds.y - pad) / snap) * snap, 0, viewportHeight);
-    const x1 = clamp(Math.ceil((bounds.x + bounds.width + pad) / snap) * snap, 1, viewportWidth);
-    const y1 = clamp(Math.ceil((bounds.y + bounds.height + pad) / snap) * snap, 1, viewportHeight);
-    const next = {
-      x: x0,
-      y: y0,
-      width: Math.max(1, x1 - x0),
-      height: Math.max(1, y1 - y0),
-    };
     const prev = this.viewportRect;
-    if (!prev
-        || prev.x !== next.x
-        || prev.y !== next.y
-        || prev.width !== next.width
-        || prev.height !== next.height) {
-      this.viewportRect = next;
-      this.updateViewportRect(next);
-      return next;
-    }
-    return prev;
+    if (prev && prev.x <= bounds.x && prev.y <= bounds.y
+        && prev.x + prev.width >= bounds.x + bounds.width
+        && prev.y + prev.height >= bounds.y + bounds.height
+        && prev.x + prev.width <= viewportWidth && prev.y + prev.height <= viewportHeight) return prev;
+    // Keep backing dimensions stable as the effect moves. Grow only when needed;
+    // rebasing inside a padded crop must not resize the canvas every grid crossing.
+    const width = Math.min(viewportWidth, Math.max(prev?.width ?? 0,
+      Math.ceil((bounds.width + VIEWPORT_PAD_PX * 2) / VIEWPORT_SNAP_PX) * VIEWPORT_SNAP_PX));
+    const height = Math.min(viewportHeight, Math.max(prev?.height ?? 0,
+      Math.ceil((bounds.height + VIEWPORT_PAD_PX * 2) / VIEWPORT_SNAP_PX) * VIEWPORT_SNAP_PX));
+    const next = {
+      x: clamp(Math.floor(bounds.x + bounds.width / 2 - width / 2), 0, viewportWidth - width),
+      y: clamp(Math.floor(bounds.y + bounds.height / 2 - height / 2), 0, viewportHeight - height),
+      width, height,
+    };
+    this.viewportRect = next;
+    return next;
   }
 
   private updateViewportRect(rect: EffectBounds) {
     if (!this.gl) return;
-    const renderScale = Math.max(this.minRenderScale, Math.min(1, this.renderScale));
-    const backingWidth = Math.max(1, Math.round(rect.width * renderScale));
-    const backingHeight = Math.max(1, Math.round(rect.height * renderScale));
+    const requestedScale = Math.max(this.minRenderScale, Math.min(1, this.renderScale));
+    // Bound actual fragments rather than shrinking the visible black hole.
+    const renderScale = Math.min(requestedScale, Math.sqrt(MAX_RENDER_PIXELS / (rect.width * rect.height)));
+    const backingWidth = Math.max(1, Math.floor(rect.width * renderScale));
+    const backingHeight = Math.max(1, Math.floor(rect.height * renderScale));
     if (this.canvas.width !== backingWidth || this.canvas.height !== backingHeight) {
       this.canvas.width = backingWidth;
       this.canvas.height = backingHeight;
       this.gl.viewport(0, 0, backingWidth, backingHeight);
     }
+    // Place the crop on the global backing-pixel grid, not an arbitrary CSS
+    // grid: a fractional sample phase change makes thin bright rings shimmer.
+    rect.x = Math.round(rect.x * backingWidth / rect.width) * rect.width / backingWidth;
+    rect.y = Math.round(rect.y * backingHeight / rect.height) * rect.height / backingHeight;
+    this.canvas.style.visibility = 'visible';
     this.canvas.style.width = `${rect.width}px`;
     this.canvas.style.height = `${rect.height}px`;
     this.canvas.style.transform = `translate3d(${rect.x}px, ${rect.y}px, 0)`;
@@ -584,8 +623,7 @@ export class BlackHoleRenderer {
 
   private hideCanvas() {
     this.viewportRect = null;
-    this.canvas.style.width = '0px';
-    this.canvas.style.height = '0px';
+    this.canvas.style.visibility = 'hidden';
   }
 
   private glidedToken(nowSec: number, cur = this.tokenLevel): number {

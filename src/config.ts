@@ -1,6 +1,7 @@
 import type { PluginLanguage } from './i18n';
 
 export interface BlackHoleSettings {
+  defaultsVersion: number;
   enabled: boolean;
   language: PluginLanguage;
   sizeMode: number;
@@ -45,18 +46,19 @@ export interface BlackHoleSettings {
 }
 
 export const DEFAULT_SETTINGS: BlackHoleSettings = {
+  defaultsVersion: 1,
   enabled: true,
   language: 'auto',
-  sizeMode: 1,
+  sizeMode: 2,
   idlePlaybackEnabled: false,
   idlePlaybackDelaySec: 45,
   tokenMetric: 'word-count',
   maxWordCount: 5000,
-  holeRadius: 0.0140,
+  holeRadius: 0.0200,
   lensDepth: 13.0000,
   starGain: 0.0,
   diskInner: 1.8000,
-  diskOuter: 7.0000,
+  diskOuter: 8.0000,
   diskIncl: 1.5000,
   diskRoll: 0.3500,
   diskGain: 2.2000,
@@ -71,8 +73,8 @@ export const DEFAULT_SETTINGS: BlackHoleSettings = {
   driftSpeed: 1.0000,
   workArea: 0.3300,
   dilationMin: 0.2000,
-  tokenAreaMin: 0.0030,
-  tokenAreaMax: 0.0200,
+  tokenAreaMin: 0.0100,
+  tokenAreaMax: 0.5000,
   tokenHomeX: 0.9600,
   tokenHomeY: 0.0400,
   tokenEase: 1.0000,
@@ -83,7 +85,7 @@ export const DEFAULT_SETTINGS: BlackHoleSettings = {
   workPeriodMin: 55,
   breakMin: 5,
   idleFadeSec: 90,
-  renderScale: 0.35,
+  renderScale: 0.75,
   captureEnabled: false,
   captureIntervalMs: 2500,
 };
@@ -92,7 +94,7 @@ type NumericKey = { [K in keyof BlackHoleSettings]: BlackHoleSettings[K] extends
 
 /** Storage validation, not the runtime GPU budget. */
 export const NUMERIC_LIMITS: Record<NumericKey, readonly [number, number]> = {
-  sizeMode: [0, 2], idlePlaybackDelaySec: [5, 600], maxWordCount: [100, 50000],
+  defaultsVersion: [1, 1], sizeMode: [0, 2], idlePlaybackDelaySec: [5, 600], maxWordCount: [100, 50000],
   holeRadius: [0.001, 0.2], lensDepth: [1, 50], starGain: [0, 5],
   diskInner: [1.6, 10], diskOuter: [3, 30], diskIncl: [0, 3.14], diskRoll: [-3.14, 3.14],
   diskGain: [0, 10], diskOpacity: [0, 1], diskTemp: [1500, 40000], dopplerMix: [0, 1],
@@ -124,12 +126,28 @@ export function normalizeSettings(data: unknown): BlackHoleSettings {
   if (source.language === 'auto' || source.language === 'en' || source.language === 'zh-CN') settings.language = source.language;
   if (source.tokenMetric === 'word-count' || source.tokenMetric === 'global-word-count'
       || source.tokenMetric === 'file-count' || source.tokenMetric === 'tab-count') settings.tokenMetric = source.tokenMetric;
+  // Upgrade only the old untouched visual preset, not customized configurations.
+  if (source.defaultsVersion === undefined && source.holeRadius === 0.014
+      && source.tokenAreaMin === 0.003 && source.tokenAreaMax === 0.02
+      && source.diskOuter === 7 && source.sizeMode === 1) {
+    settings.holeRadius = DEFAULT_SETTINGS.holeRadius;
+    settings.tokenAreaMin = DEFAULT_SETTINGS.tokenAreaMin;
+    settings.tokenAreaMax = DEFAULT_SETTINGS.tokenAreaMax;
+    settings.diskOuter = DEFAULT_SETTINGS.diskOuter;
+    settings.sizeMode = DEFAULT_SETTINGS.sizeMode;
+    if (source.renderScale === 0.35) settings.renderScale = DEFAULT_SETTINGS.renderScale;
+  }
   settings.tokenAreaMax = Math.max(settings.tokenAreaMin, settings.tokenAreaMax);
   settings.diskOuter = Math.max(settings.diskInner + 0.5, settings.diskOuter);
   return settings;
 }
 
-/** Hardware-only budget; never write these effective values back to storage. */
+/** Pixel budget is enforced against actual crop area by the renderer. */
 export function runtimeRenderScale(settings: BlackHoleSettings): number {
-  return Math.min(settings.renderScale, 0.35);
+  return settings.renderScale;
+}
+
+/** Reset effect/performance parameters without changing language or the on/off switch. */
+export function resetEffectSettings(current: BlackHoleSettings): BlackHoleSettings {
+  return { ...DEFAULT_SETTINGS, language: current.language, enabled: current.enabled };
 }

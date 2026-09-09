@@ -9,6 +9,9 @@ export type TranslationKey =
   | 'notice.startFailed'
   | 'notice.requireWebgl2'
   | 'notice.softwareUnsupported'
+  | 'settings.reset.name'
+  | 'settings.reset.desc'
+  | 'settings.reset.button'
   | 'settings.title'
   | 'settings.general'
   | 'settings.language.name'
@@ -72,6 +75,9 @@ const translations: Record<SupportedLocale, Record<TranslationKey, string>> = {
     'notice.startFailed': 'Black Hole failed to start — see console for details.',
     'notice.requireWebgl2': 'Black Hole plugin requires WebGL2',
     'notice.softwareUnsupported': 'Black Hole: software rendering is not supported. Animation is stopped to protect the UI. Enable hardware acceleration and check your GPU drivers before retrying.',
+    'settings.reset.name': 'Restore upstream animation defaults',
+    'settings.reset.desc': 'Restore the 42-second Ghostty showcase, size and performance defaults. Keeps language and the on/off switch; workspace capture will be off.',
+    'settings.reset.button': 'Restore defaults',
     'settings.title': 'Black Hole Settings',
     'settings.general': 'General',
     'settings.language.name': 'Language',
@@ -120,7 +126,7 @@ const translations: Record<SupportedLocale, Record<TranslationKey, string>> = {
     'settings.nSteps.name': 'Integration Steps',
     'settings.nSteps.desc': 'Geodesic steps per pixel — higher = more accurate but slower',
     'settings.renderScale.name': 'Render Scale',
-    'settings.renderScale.desc': 'Requested shader resolution scale (0.15–1). The hardware runtime budget caps it at 0.35 without changing this setting. Software rendering is not supported.',
+    'settings.renderScale.desc': 'Requested shader resolution scale (0.15–1). Actual resolution is capped by a 262,144-pixel budget without changing effect size. Software rendering is not supported.',
     'settings.captureEnabled.name': 'Capture Workspace',
     'settings.captureEnabled.desc': 'Warp your actual notes into the lens. Turn OFF if the UI stutters — the hole then lenses the starfield only.',
     'settings.captureInterval.name': 'Capture Interval (ms)',
@@ -134,6 +140,9 @@ const translations: Record<SupportedLocale, Record<TranslationKey, string>> = {
     'notice.startFailed': '黑洞插件启动失败，请查看控制台日志。',
     'notice.requireWebgl2': '黑洞插件需要 WebGL2 才能运行',
     'notice.softwareUnsupported': '黑洞不支持软件渲染，已停止动画以避免界面卡死。请启用硬件加速并检查 GPU 驱动后重试。',
+    'settings.reset.name': '恢复上游动画默认值',
+    'settings.reset.desc': '恢复 Ghostty 42 秒巡演、尺寸与性能参数。保留语言和总开关，关闭工作区截图。',
+    'settings.reset.button': '一键恢复默认',
     'settings.title': '黑洞设置',
     'settings.general': '通用',
     'settings.language.name': '语言',
@@ -182,7 +191,7 @@ const translations: Record<SupportedLocale, Record<TranslationKey, string>> = {
     'settings.nSteps.name': '积分步数',
     'settings.nSteps.desc': '每像素的测地线积分步数，越高越精确但越慢',
     'settings.renderScale.name': '渲染缩放',
-    'settings.renderScale.desc': '期望的渲染比例（0.15–1）。硬件运行预算最高为 0.35，不会改写此设置；不支持软件渲染。',
+    'settings.renderScale.desc': '期望的渲染比例（0.15–1）。实际分辨率受 262,144 像素预算限制，不会缩小黑洞；不支持软件渲染。',
     'settings.captureEnabled.name': '捕获工作区',
     'settings.captureEnabled.desc': '把真实笔记内容扭曲进透镜中。如果界面卡顿请关闭，此时只渲染星场。',
     'settings.captureInterval.name': '捕获间隔（毫秒）',

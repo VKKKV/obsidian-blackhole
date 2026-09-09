@@ -62,6 +62,7 @@ precision highp int;
 // ---- uniforms (set by renderer every frame) ----
 uniform vec2  uResolution;
 uniform float uTime;
+uniform float uDemoTime;
 uniform sampler2D uTexture;
 uniform int   uSizeMode;
 uniform int   uCaptureEnabled;
@@ -188,7 +189,7 @@ DiskLook mixLook(DiskLook a, DiskLook b, float f) {
 }
 
 DiskLook demoLook() {
-    float u = mod(uTime, DEMO_SEC) / DEMO_SEC * float(DEMO_N);
+    float u = mod(uDemoTime, DEMO_SEC) / DEMO_SEC * float(DEMO_N);
     int   i = int(min(u, float(DEMO_N) - 0.001));
     float f = smoothstep(1.0 - DEMO_XFADE, 1.0, fract(u));
     return mixLook(DEMO_TOUR[i], DEMO_TOUR[(i + 1) % DEMO_N], f);

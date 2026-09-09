@@ -25,6 +25,15 @@ export class BlackHoleSettingsTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.createEl('h2', { text: t('settings.title') });
 
+    new Setting(containerEl)
+      .setName(t('settings.reset.name'))
+      .setDesc(t('settings.reset.desc'))
+      .addButton(button => button.setButtonText(t('settings.reset.button')).onClick(async () => {
+        button.setDisabled(true);
+        try { await this.plugin.resetSettings(); this.display(); }
+        finally { button.setDisabled(false); }
+      }));
+
     containerEl.createEl('h3', { text: t('settings.general') });
     new Setting(containerEl)
       .setName(t('settings.language.name'))
@@ -136,14 +145,14 @@ export class BlackHoleSettingsTab extends PluginSettingTab {
 
     // ---- hole & lensing ----
     containerEl.createEl('h3', { text: t('settings.section.hole') });
-    this.slider(t('settings.holeRadius.name'), this.plugin.settings.holeRadius, 0.001, 0.014, 0.001, (v) => { this.plugin.settings.holeRadius = v; });
+    this.slider(t('settings.holeRadius.name'), this.plugin.settings.holeRadius, 0.001, 0.08, 0.001, (v) => { this.plugin.settings.holeRadius = v; });
     this.slider(t('settings.lensDepth.name'), this.plugin.settings.lensDepth, 1, 50, 0.5, (v) => { this.plugin.settings.lensDepth = v; });
     this.slider(t('settings.starGain.name'), this.plugin.settings.starGain, 0, 5, 0.1, (v) => { this.plugin.settings.starGain = v; });
 
     // ---- accretion disk ----
     containerEl.createEl('h3', { text: t('settings.section.disk') });
     this.slider(t('settings.diskInner.name'), this.plugin.settings.diskInner, 1.6, 10, 0.1, (v) => { this.plugin.settings.diskInner = v; });
-    this.slider(t('settings.diskOuter.name'), this.plugin.settings.diskOuter, 3, 7, 0.5, (v) => { this.plugin.settings.diskOuter = v; });
+    this.slider(t('settings.diskOuter.name'), this.plugin.settings.diskOuter, 3, 30, 0.5, (v) => { this.plugin.settings.diskOuter = v; });
     this.slider(t('settings.diskIncl.name'), this.plugin.settings.diskIncl, 0, 3.14, 0.01, (v) => { this.plugin.settings.diskIncl = v; });
     this.slider(t('settings.diskRoll.name'), this.plugin.settings.diskRoll, -3.14, 3.14, 0.01, (v) => { this.plugin.settings.diskRoll = v; });
     this.slider(t('settings.diskGain.name'), this.plugin.settings.diskGain, 0, 10, 0.1, (v) => { this.plugin.settings.diskGain = v; });
@@ -205,7 +214,7 @@ export class BlackHoleSettingsTab extends PluginSettingTab {
         });
       });
 
-    this.slider(t('settings.tokenAreaMax.name'), this.plugin.settings.tokenAreaMax * 1000, this.plugin.settings.tokenAreaMin * 1000, Math.max(20, this.plugin.settings.tokenAreaMin * 1000), 0.1, (v) => { this.plugin.settings.tokenAreaMax = v / 1000; });
+    this.slider(t('settings.tokenAreaMax.name'), this.plugin.settings.tokenAreaMax * 1000, this.plugin.settings.tokenAreaMin * 1000, Math.max(500, this.plugin.settings.tokenAreaMin * 1000), 0.1, (v) => { this.plugin.settings.tokenAreaMax = v / 1000; });
   }
 
   private slider(

@@ -17,7 +17,7 @@ with tempfile.TemporaryDirectory(prefix='blackhole-webgl-') as tmp:
         page.set_content('<style>body{margin:0;background:#ddd}#host{position:relative;width:800px;height:600px}canvas{position:absolute;pointer-events:none}</style><div id="host"></div>')
         page.add_script_tag(path=str(tmp/'bundle.js'))
         result = page.evaluate('''async () => {
-          const params={...Test.DEFAULT_SETTINGS,tokenGlideMin:.3,tokenGlideMax:1.5,tokenGlideRate:10};
+          const params={...Test.DEFAULT_SETTINGS,holeRadius:.014,tokenAreaMin:.003,tokenAreaMax:.02,diskOuter:7,tokenGlideMin:.3,tokenGlideMax:1.5,tokenGlideRate:10};
           const host=document.querySelector('#host');
           const rejected=new Test.BlackHoleRenderer(document.createElement('canvas'),params);
           const softwareRejected=!await rejected.init();rejected.destroy();
@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix='blackhole-webgl-') as tmp:
           let red=0,blue=0;for(let i=0;i<pixels.length;i+=4){red+=pixels[i]*pixels[i+3];blue+=pixels[i+2]*pixels[i+3]}
           // Drive RAF timestamps without waiting: healthy intentional cadence.
           r.autoQuality=true;r.startTime=100000;r.prevTime=100000;r.dtAvg=0;r.lastScaleAdjust=100000;
-          for(let now=100000;now<110000;now+=1000/15)r.renderFrame(now);
+          for(let now=100000;now<110000;now+=1000/60)r.renderFrame(now);
           const healthyScale=r.renderScale;
           let contextLost=false;r.onFatalError=()=>contextLost=true;
           const lose=gl.getExtension('WEBGL_lose_context');lose.loseContext();

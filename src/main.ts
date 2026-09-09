@@ -1,16 +1,11 @@
 import { Plugin, Notice, MarkdownView } from 'obsidian';
 import { BlackHoleSettingsTab } from './settings';
-import { BlackHoleSettings, DEFAULT_SETTINGS, normalizeSettings, runtimeRenderScale } from './config';
+import { BlackHoleSettings, DEFAULT_SETTINGS, normalizeSettings, resetEffectSettings, runtimeRenderScale } from './config';
 import { BlackHoleRenderer } from './renderer';
 import { WorkspaceCapture } from './capture';
 import { t as translate, TranslationKey } from './i18n';
 import { ShaderParams } from './shader';
 import { MetricCache } from './metrics';
-
-const MAX_HOLE_RADIUS = 0.014;
-const MAX_TOKEN_AREA_MIN = 0.003;
-const MAX_TOKEN_AREA_MAX = 0.02;
-const MAX_DISK_OUTER = 7.0;
 
 export default class BlackHolePlugin extends Plugin {
   settings: BlackHoleSettings = { ...DEFAULT_SETTINGS };
@@ -265,7 +260,7 @@ export default class BlackHolePlugin extends Plugin {
     }
     const allowed = eligible && remaining <= 0;
     if (allowed && !this.renderer) { void this.startInternal(); return; }
-    const suspended = !allowed || !this.ready || this.compiling;
+    const suspended = !allowed || !this.ready;
     this.canvas?.classList.toggle('hidden', suspended);
     this.capture?.setSuspended(suspended);
     if (!this.renderer || !this.ready) return;
@@ -304,18 +299,28 @@ export default class BlackHolePlugin extends Plugin {
     }
   }
 
+  async resetSettings() {
+    if (this.unloaded) return;
+    this.stop();
+    this.settings = resetEffectSettings(this.settings);
+    this.runtimeBlocked = false;
+    this.lastActivity = performance.now();
+    this.syncPlaybackGate();
+    await this.saveSettings();
+  }
+
   async saveSettings() { await this.saveData(this.settings); }
   private async loadSettings() { this.settings = normalizeSettings(await this.loadData()); }
   t(key: TranslationKey): string { return translate(this.settings.language, key); }
 
   toShaderParams(): ShaderParams {
-    const minArea = Math.min(this.settings.tokenAreaMin, MAX_TOKEN_AREA_MIN);
+    const minArea = this.settings.tokenAreaMin;
     return {
-      holeRadius: Math.min(this.settings.holeRadius, MAX_HOLE_RADIUS),
+      holeRadius: this.settings.holeRadius,
       lensDepth: this.settings.lensDepth,
       starGain: this.settings.starGain,
       diskInner: this.settings.diskInner,
-      diskOuter: Math.min(this.settings.diskOuter, MAX_DISK_OUTER),
+      diskOuter: this.settings.diskOuter,
       diskIncl: this.settings.diskIncl,
       diskRoll: this.settings.diskRoll,
       diskGain: this.settings.diskGain,
@@ -331,7 +336,7 @@ export default class BlackHolePlugin extends Plugin {
       workArea: this.settings.workArea,
       dilationMin: this.settings.dilationMin,
       tokenAreaMin: minArea,
-      tokenAreaMax: Math.max(minArea, Math.min(this.settings.tokenAreaMax, MAX_TOKEN_AREA_MAX)),
+      tokenAreaMax: Math.max(minArea, this.settings.tokenAreaMax),
       tokenHomeX: this.settings.tokenHomeX,
       tokenHomeY: this.settings.tokenHomeY,
       tokenEase: this.settings.tokenEase,
