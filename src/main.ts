@@ -1,15 +1,12 @@
-import { Plugin, Notice, MarkdownView, EventRef, debounce } from 'obsidian';
-import {
-  BlackHoleSettings, BlackHoleSettingsTab, DEFAULT_SETTINGS,
-} from './settings';
+import { Plugin, Notice, MarkdownView } from 'obsidian';
+import { BlackHoleSettingsTab } from './settings';
+import { BlackHoleSettings, DEFAULT_SETTINGS, normalizeSettings, runtimeRenderScale } from './config';
 import { BlackHoleRenderer } from './renderer';
 import { WorkspaceCapture } from './capture';
-import { PluginLanguage, t as translate, TranslationKey } from './i18n';
+import { t as translate, TranslationKey } from './i18n';
 import { ShaderParams } from './shader';
+import { MetricCache } from './metrics';
 
-const MAX_RENDER_SCALE = 0.35;
-const MAX_RENDER_SCALE_SOFTWARE = 0.22;
-const MAX_SHADER_STEPS = 10;
 const MAX_HOLE_RADIUS = 0.014;
 const MAX_TOKEN_AREA_MIN = 0.003;
 const MAX_TOKEN_AREA_MAX = 0.02;
@@ -20,236 +17,299 @@ export default class BlackHolePlugin extends Plugin {
   private renderer: BlackHoleRenderer | null = null;
   private capture: WorkspaceCapture | null = null;
   private canvas: HTMLCanvasElement | null = null;
-  private enabled = true;
-
+  private unloaded = false;
+  private layoutReady = false;
+  private runtimeBlocked = false;
+  private generation = 0;
+  private ready = false;
+  private compiling = false;
+  private paramsVersion = 0;
   private lastActivity = 0;
-  private captureIntervalId: number = 0;
-  private metricIntervalId: number = 0;
-  private leafChangeRef: EventRef | null = null;
-  private layoutChangeRef: EventRef | null = null;
-  private idleResumeTimeoutId: number = 0;
-  private playbackSuspended = false;
+  private playbackSuspended = true;
+  private captureAvailable = false;
+  private captureIntervalId = 0;
+  private metricIntervalId = 0;
+  private idleResumeTimeoutId = 0;
+  private recompileTimeoutId = 0;
+  private scrollTimeoutId = 0;
+  private metrics = new MetricCache({
+    currentText: () => this.app.workspace.getActiveViewOfType(MarkdownView)?.editor?.getValue() ?? null,
+    markdownFileCount: () => this.app.vault.getMarkdownFiles().length,
+    markdownTabCount: () => this.app.workspace.getLeavesOfType('markdown').length,
+  });
 
   async onload() {
     await this.loadSettings();
+    if (this.unloaded) return;
+    this.lastActivity = performance.now();
     this.addSettingTab(new BlackHoleSettingsTab(this.app, this));
-
     this.addRibbonIcon('circle-dot', this.t('ribbon.toggle'), () => {
-      this.enabled = !this.enabled;
-      if (this.enabled) this.start();
-      else this.stop();
-      new Notice(this.enabled ? this.t('notice.enabled') : this.t('notice.disabled'));
+      void this.setEnabled(!this.settings.enabled);
     });
-
-    // Defer the first start until the workspace DOM is laid out — querying or
-    // capturing before layout-ready can grab a zero-size element or throw.
+    this.registerDomEvent(document, 'keydown', this.activityHandler);
+    this.registerDomEvent(document, 'mousedown', this.activityHandler);
+    this.registerDomEvent(document, 'touchstart', this.activityHandler);
+    this.registerDomEvent(document, 'wheel', this.activityHandler, { passive: true });
+    this.registerDomEvent(document, 'visibilitychange', this.visibilityHandler);
+    this.registerDomEvent(document, 'scroll', this.scrollHandler, { capture: true, passive: true });
+    this.registerEvent(this.app.workspace.on('editor-change', () => {
+      this.metrics.invalidate('word-count');
+      this.capture?.requestSoon();
+    }));
+    this.registerEvent(this.app.workspace.on('active-leaf-change', this.refreshTarget));
+    this.registerEvent(this.app.workspace.on('file-open', this.refreshTarget));
+    this.registerEvent(this.app.workspace.on('layout-change', this.refreshTarget));
+    const invalidateFiles = () => this.metrics.invalidate('word-count', 'file-count', 'global-word-count');
+    this.registerEvent(this.app.vault.on('create', invalidateFiles));
+    this.registerEvent(this.app.vault.on('delete', invalidateFiles));
+    this.registerEvent(this.app.vault.on('rename', invalidateFiles));
+    this.registerEvent(this.app.vault.on('modify', invalidateFiles));
+    // Obsidian does not expose cancellation for this callback; the lifetime guard is mandatory.
     this.app.workspace.onLayoutReady(() => {
-      if (this.enabled) this.start();
+      if (this.unloaded) return;
+      this.layoutReady = true;
+      this.syncPlaybackGate();
     });
   }
 
   onunload() {
+    this.unloaded = true;
     this.stop();
   }
 
-  start() {
-    if (this.renderer) return;
+  async setEnabled(enabled: boolean) {
+    if (this.unloaded) return;
+    this.settings.enabled = enabled;
+    this.runtimeBlocked = false;
+    if (enabled) this.start();
+    else this.stop();
+    new Notice(enabled ? this.t('notice.enabled') : this.t('notice.disabled'));
+    await this.saveSettings();
+  }
+
+  start() { this.syncPlaybackGate(); }
+
+  private isCurrent(renderer: BlackHoleRenderer, generation: number) {
+    return !this.unloaded && this.settings.enabled && this.renderer === renderer && this.generation === generation;
+  }
+
+  private async startInternal() {
+    const generation = ++this.generation;
     try {
-      this.startInternal();
-    } catch (e) {
-      console.error('BlackHole: failed to start.', e);
-      new Notice(this.t('notice.startFailed'));
-      this.stop();
-      this.enabled = false;
+      const canvas = document.createElement('canvas');
+      canvas.className = 'blackhole-canvas hidden';
+      this.canvas = canvas;
+      (document.querySelector('.app-container') ?? document.body).appendChild(canvas);
+      const renderer = new BlackHoleRenderer(canvas, this.toShaderParams());
+      this.renderer = renderer;
+      renderer.onFatalError = (reason) => {
+        if (this.isCurrent(renderer, generation)) this.fail(reason);
+      };
+      const version = this.paramsVersion;
+      const initStart = performance.now();
+      const initialized = await renderer.init();
+      console.info(`BlackHole: renderer initialization ${(performance.now() - initStart).toFixed(1)}ms`);
+      if (!this.isCurrent(renderer, generation)) return;
+      if (!initialized || renderer.softwareRenderer) {
+        this.fail(renderer.softwareRenderer ? this.t('notice.softwareUnsupported') : renderer.lastError || this.t('notice.startFailed'));
+        return;
+      }
+      // Settings may have changed while the driver compiled the initial program.
+      let compiledVersion = version;
+      while (compiledVersion !== this.paramsVersion) {
+        compiledVersion = this.paramsVersion;
+        const ok = await renderer.recompile(this.toShaderParams());
+        if (!this.isCurrent(renderer, generation)) return;
+        if (!ok) { this.fail(renderer.lastError || this.t('notice.startFailed')); return; }
+      }
+      const capture = new WorkspaceCapture();
+      this.capture = capture;
+      capture.setSuspended(true);
+      capture.setElement(this.findCaptureTarget());
+      capture.onAvailabilityChange = (available) => {
+        if (!this.isCurrent(renderer, generation) || this.capture !== capture) return;
+        this.captureAvailable = available;
+        renderer.captureEnabled = this.settings.captureEnabled && available;
+      };
+      capture.onCapture = (image) => {
+        if (!this.isCurrent(renderer, generation) || this.capture !== capture
+            || this.playbackSuspended || !this.settings.captureEnabled) return;
+        try { renderer.updateTexture(image); }
+        catch (error) { this.fail(String(error)); }
+      };
+      this.ready = true;
+      renderer.sizeMode = this.settings.sizeMode;
+      renderer.lastActivity = this.lastActivity / 1000;
+      this.updateMetric();
+      this.captureIntervalId = window.setInterval(() => {
+        if (!this.playbackSuspended && !document.hidden) this.capture?.capture(performance.now());
+      }, 1000);
+      this.metricIntervalId = window.setInterval(() => {
+        if (!this.playbackSuspended && !document.hidden) this.updateMetric();
+      }, 1000);
+      this.applyRuntimeSettings();
+    } catch (error) {
+      if (this.generation === generation && !this.unloaded) this.fail(String(error));
     }
   }
 
-  private startInternal() {
-    // create overlay canvas
-    const canvas = document.createElement('canvas');
-    canvas.className = 'blackhole-canvas';
-    this.canvas = canvas;
-
-    // Mount over the whole Obsidian window so the hole can roam everywhere
-    // (workspace, sidebars, ribbon). The canvas is transparent except near the
-    // hole, and pointer-events:none keeps everything underneath interactive.
-    const host = document.querySelector('.app-container') ?? document.body;
-    host.appendChild(canvas);
-
-    // init renderer
-    this.renderer = new BlackHoleRenderer(canvas, this.toShaderParams());
-    if (!this.renderer.init()) {
-      console.error('BlackHole: WebGL2 not available');
-      new Notice(this.t('notice.requireWebgl2'));
-      canvas.remove();
-      this.renderer = null;
-      this.canvas = null;
-      return;
-    }
-
-    // init capture
-    const capture = new WorkspaceCapture();
-    capture.setElement(this.findCaptureTarget());
-    capture.onCapture = (canvas) => {
-      if (this.capture !== capture || !this.renderer) return;
-      this.renderer.updateTexture(canvas);
-    };
-    this.capture = capture;
-    // blank initial texture
-    const blank = WorkspaceCapture.blankCanvas(window.innerWidth, window.innerHeight);
-    this.renderer.updateTexture(blank);
-    this.lastActivity = performance.now();
-
-    // apply perf settings; if no GPU (software renderer), drop quality so the
-    // heavy geodesic shader doesn't freeze the UI.
-    if (this.renderer.softwareRenderer && this.settings.renderScale >= 0.5) {
-      new Notice(this.t('notice.softwareReduced'));
-    }
-    this.applyRuntimeSettings();
-
-    // kick off a capture immediately so we don't render against blank for ~350ms
-    this.capture.capture(performance.now());
-
-    // wire state
-    this.renderer.sizeMode = this.settings.sizeMode;
-    this.renderer.lastActivity = this.lastActivity / 1000;
-    this.renderer.tokenLevel = this.computeTokenLevel();
-
-    // start rendering
-    this.renderer.start();
-    this.syncPlaybackGate();
-
-    // activity tracking
-    document.addEventListener('keydown', this.activityHandler);
-    document.addEventListener('mousedown', this.activityHandler);
-    document.addEventListener('touchstart', this.activityHandler);
-    document.addEventListener('wheel', this.activityHandler, { passive: true });
-
-    // Capture poll. dom-to-image is heavy and main-thread, so we DON'T capture
-    // every frame — the GPU animates the lens against the last snapshot. This
-    // poll just checks whether a fresh capture is due; completed captures push
-    // their canvas back through WorkspaceCapture.onCapture.
-    this.captureIntervalId = window.setInterval(() => {
-      try {
-        if (!this.renderer || !this.capture || this.playbackSuspended) return;
-        this.capture.capture(performance.now());
-      } catch (e) {
-        console.error('BlackHole: capture tick failed.', e);
-      }
-    }, 1000);
-
-    // metric polling for token mode
-    this.metricIntervalId = window.setInterval(() => {
-      try {
-        if (!this.renderer || this.settings.sizeMode !== 1 || this.playbackSuspended) return;
-        this.renderer.tokenLevel = this.computeTokenLevel();
-      } catch (e) {
-        console.error('BlackHole: metric tick failed.', e);
-      }
-    }, 1000);
-
-    // Re-capture when content actually changes — switching notes, layout
-    // changes, or after scrolling settles — instead of continuously. Keeps the
-    // snapshot fresh without the per-frame dom-to-image cost.
-    const refresh = () => {
-      try {
-        this.capture?.setElement(this.findCaptureTarget());
-        this.capture?.requestSoon();
-      } catch (e) {
-        console.error('BlackHole: capture-target refresh failed.', e);
-      }
-    };
-    this.leafChangeRef = this.app.workspace.on('active-leaf-change', refresh);
-    this.layoutChangeRef = this.app.workspace.on('layout-change', refresh);
-    document.addEventListener('scroll', this.scrollHandler, { capture: true, passive: true });
+  private fail(reason: string) {
+    console.error('BlackHole:', reason);
+    this.runtimeBlocked = true;
+    this.stop();
+    new Notice(reason || this.t('notice.startFailed'));
   }
 
   stop() {
-    if (this.renderer) {
-      this.renderer.destroy();
-      this.renderer = null;
-    }
-    this.capture = null;
-    if (this.canvas) {
-      this.canvas.remove();
-      this.canvas = null;
-    }
+    ++this.generation;
     window.clearInterval(this.captureIntervalId);
     window.clearInterval(this.metricIntervalId);
     window.clearTimeout(this.idleResumeTimeoutId);
-    this.captureIntervalId = 0;
-    this.metricIntervalId = 0;
-    this.idleResumeTimeoutId = 0;
-    this.playbackSuspended = false;
-
-    document.removeEventListener('keydown', this.activityHandler);
-    document.removeEventListener('mousedown', this.activityHandler);
-    document.removeEventListener('touchstart', this.activityHandler);
-    document.removeEventListener('wheel', this.activityHandler);
-    document.removeEventListener('scroll', this.scrollHandler, { capture: true } as any);
-
-    if (this.leafChangeRef) { this.app.workspace.offref(this.leafChangeRef); this.leafChangeRef = null; }
-    if (this.layoutChangeRef) { this.app.workspace.offref(this.layoutChangeRef); this.layoutChangeRef = null; }
+    window.clearTimeout(this.recompileTimeoutId);
+    window.clearTimeout(this.scrollTimeoutId);
+    this.captureIntervalId = this.metricIntervalId = this.idleResumeTimeoutId = 0;
+    this.recompileTimeoutId = this.scrollTimeoutId = 0;
+    const renderer = this.renderer;
+    const capture = this.capture;
+    this.renderer = null;
+    this.capture = null;
+    this.ready = false;
+    this.compiling = false;
+    this.captureAvailable = false;
+    this.playbackSuspended = true;
+    this.metrics.clear();
+    try { capture?.destroy(); }
+    finally {
+      try { renderer?.destroy(); }
+      finally { this.canvas?.remove(); this.canvas = null; }
+    }
   }
 
   onModeChange() {
     if (!this.renderer) return;
-    // sizeMode is a uniform, not a baked const — no recompile needed.
     this.renderer.sizeMode = this.settings.sizeMode;
-    this.renderer.tokenLevel = this.computeTokenLevel();
-    this.capture?.reset();
+    this.updateMetric();
   }
 
-  /**
-   * Tunable params are baked into the shader as compile-time consts, so changing
-   * one requires a recompile. Debounced so dragging a slider doesn't recompile
-   * the shader on every tick — only ~once the user pauses.
-   */
   onParamsChange() {
-    this.recompileSoon();
+    this.settings = normalizeSettings(this.settings);
+    ++this.paramsVersion;
+    window.clearTimeout(this.recompileTimeoutId);
+    if (!this.renderer || !this.ready || this.unloaded) return;
+    const generation = this.generation;
+    this.recompileTimeoutId = window.setTimeout(() => {
+      this.recompileTimeoutId = 0;
+      if (generation === this.generation) void this.recompile();
+    }, 200);
   }
 
-  /** Apply non-shader runtime settings (render scale, capture cadence). */
-  applyRuntimeSettings() {
-    if (this.renderer) {
-      this.renderer.captureEnabled = this.settings.captureEnabled;
-      const effectiveScale = this.renderer.softwareRenderer
-        ? Math.min(this.settings.renderScale, MAX_RENDER_SCALE_SOFTWARE)
-        : Math.min(this.settings.renderScale, MAX_RENDER_SCALE);
-      this.renderer.setRenderScale(effectiveScale);
+  private async recompile() {
+    const renderer = this.renderer;
+    if (!renderer || !this.ready || this.compiling) return;
+    const generation = this.generation;
+    this.compiling = true;
+    this.syncPlaybackGate();
+    try {
+      let version: number;
+      do {
+        version = this.paramsVersion;
+        const ok = await renderer.recompile(this.toShaderParams());
+        if (!this.isCurrent(renderer, generation)) return;
+        if (!ok) { this.fail(renderer.lastError || this.t('notice.startFailed')); return; }
+      } while (version !== this.paramsVersion);
+    } catch (error) {
+      if (this.isCurrent(renderer, generation)) this.fail(String(error));
+    } finally {
+      if (this.isCurrent(renderer, generation)) {
+        this.compiling = false;
+        this.syncPlaybackGate();
+      }
     }
-    this.capture?.setOptions({
-      enabled: this.settings.captureEnabled,
-      intervalMs: Math.max(this.settings.captureIntervalMs, 2500),
-    });
+  }
+
+  applyRuntimeSettings() {
+    if (this.renderer && this.ready) {
+      this.renderer.captureEnabled = this.settings.captureEnabled && this.captureAvailable;
+      this.renderer.setRenderScale(runtimeRenderScale(this.settings));
+    }
+    this.capture?.setOptions({ enabled: this.settings.captureEnabled, intervalMs: Math.max(this.settings.captureIntervalMs, 2500) });
     this.syncPlaybackGate();
   }
 
-  private recompileSoon = debounce(() => {
-    if (this.renderer) this.renderer.recompile(this.toShaderParams());
-  }, 200, true);
+  private activityHandler = () => {
+    if (this.unloaded) return;
+    this.lastActivity = performance.now();
+    if (this.renderer) this.renderer.lastActivity = this.lastActivity / 1000;
+    this.syncPlaybackGate();
+  };
 
-  // Re-capture once scrolling settles (trailing debounce) rather than on every
-  // scroll event — keeps the snapshot current without thrashing dom-to-image.
-  private requestCaptureSoon = debounce(() => {
+  private visibilityHandler = () => {
+    if (!document.hidden) this.lastActivity = performance.now();
+    if (this.renderer) this.renderer.lastActivity = this.lastActivity / 1000;
+    this.syncPlaybackGate();
+  };
+
+  /** The only path allowed to start rendering or resume capture. */
+  private syncPlaybackGate() {
+    window.clearTimeout(this.idleResumeTimeoutId);
+    this.idleResumeTimeoutId = 0;
+    const eligible = !this.unloaded && this.layoutReady && this.settings.enabled && !this.runtimeBlocked && !document.hidden;
+    const remaining = this.settings.idlePlaybackEnabled
+      ? this.settings.idlePlaybackDelaySec * 1000 - (performance.now() - this.lastActivity) : 0;
+    if (eligible && remaining > 0) {
+      const generation = this.generation;
+      this.idleResumeTimeoutId = window.setTimeout(() => {
+        this.idleResumeTimeoutId = 0;
+        if (generation === this.generation) this.syncPlaybackGate();
+      }, remaining);
+    }
+    const allowed = eligible && remaining <= 0;
+    if (allowed && !this.renderer) { void this.startInternal(); return; }
+    const suspended = !allowed || !this.ready || this.compiling;
+    this.canvas?.classList.toggle('hidden', suspended);
+    this.capture?.setSuspended(suspended);
+    if (!this.renderer || !this.ready) return;
+    if (suspended) this.renderer.stop();
+    else if (this.playbackSuspended) {
+      this.updateMetric();
+      this.capture?.requestSoon();
+      this.renderer.start();
+    }
+    this.playbackSuspended = suspended;
+  }
+
+  private refreshTarget = () => {
+    if (this.unloaded) return;
+    this.metrics.invalidate('word-count', 'tab-count');
+    this.capture?.setElement(this.findCaptureTarget());
     this.capture?.requestSoon();
-  }, 250, true);
-  private scrollHandler = () => { this.requestCaptureSoon(); };
+  };
+
+  private scrollHandler = () => {
+    window.clearTimeout(this.scrollTimeoutId);
+    if (!this.capture || this.playbackSuspended) return;
+    const generation = this.generation;
+    this.scrollTimeoutId = window.setTimeout(() => {
+      this.scrollTimeoutId = 0;
+      if (generation === this.generation && !this.playbackSuspended) this.capture?.requestSoon();
+    }, 250);
+  };
+
+  private updateMetric() {
+    if (!this.renderer) return;
+    try { this.renderer.tokenLevel = this.metrics.level(this.settings, performance.now()); }
+    catch (error) {
+      this.renderer.tokenLevel = -1;
+      console.error('BlackHole: token metric failed.', error);
+    }
+  }
 
   async saveSettings() { await this.saveData(this.settings); }
-
-  private async loadSettings() {
-    const data = await this.loadData();
-    if (data) this.settings = { ...DEFAULT_SETTINGS, ...data };
-    const changed = this.normalizeSettings();
-    if (changed) await this.saveSettings();
-  }
-
-  t(key: TranslationKey): string {
-    return translate(this.settings.language as PluginLanguage, key);
-  }
+  private async loadSettings() { this.settings = normalizeSettings(await this.loadData()); }
+  t(key: TranslationKey): string { return translate(this.settings.language, key); }
 
   toShaderParams(): ShaderParams {
+    const minArea = Math.min(this.settings.tokenAreaMin, MAX_TOKEN_AREA_MIN);
     return {
       holeRadius: Math.min(this.settings.holeRadius, MAX_HOLE_RADIUS),
       lensDepth: this.settings.lensDepth,
@@ -270,15 +330,15 @@ export default class BlackHolePlugin extends Plugin {
       driftSpeed: this.settings.driftSpeed,
       workArea: this.settings.workArea,
       dilationMin: this.settings.dilationMin,
-      tokenAreaMin: Math.min(this.settings.tokenAreaMin, MAX_TOKEN_AREA_MIN),
-      tokenAreaMax: Math.min(this.settings.tokenAreaMax, MAX_TOKEN_AREA_MAX),
+      tokenAreaMin: minArea,
+      tokenAreaMax: Math.max(minArea, Math.min(this.settings.tokenAreaMax, MAX_TOKEN_AREA_MAX)),
       tokenHomeX: this.settings.tokenHomeX,
       tokenHomeY: this.settings.tokenHomeY,
       tokenEase: this.settings.tokenEase,
       tokenReach: this.settings.tokenReach,
       tokenCalm: this.settings.tokenCalm,
       tokenRush: this.settings.tokenRush,
-      nSteps: Math.min(this.settings.nSteps, MAX_SHADER_STEPS),
+      nSteps: this.settings.nSteps,
       workPeriodMin: this.settings.workPeriodMin,
       breakMin: this.settings.breakMin,
       idleFadeSec: this.settings.idleFadeSec,
@@ -288,104 +348,9 @@ export default class BlackHolePlugin extends Plugin {
     };
   }
 
-  private normalizeSettings(): boolean {
-    const before = JSON.stringify(this.settings);
-    this.settings.holeRadius = Math.min(this.settings.holeRadius, MAX_HOLE_RADIUS);
-    this.settings.tokenAreaMin = Math.min(this.settings.tokenAreaMin, MAX_TOKEN_AREA_MIN);
-    this.settings.tokenAreaMax = Math.min(this.settings.tokenAreaMax, MAX_TOKEN_AREA_MAX);
-    this.settings.diskOuter = Math.min(this.settings.diskOuter, MAX_DISK_OUTER);
-    this.settings.nSteps = Math.min(this.settings.nSteps, MAX_SHADER_STEPS);
-    this.settings.renderScale = Math.min(this.settings.renderScale, MAX_RENDER_SCALE);
-    this.settings.captureIntervalMs = Math.max(this.settings.captureIntervalMs, 2500);
-    this.settings.idlePlaybackDelaySec = Math.max(this.settings.idlePlaybackDelaySec, 5);
-    return JSON.stringify(this.settings) !== before;
-  }
-
-  private activityHandler = () => {
-    this.lastActivity = performance.now();
-    if (this.renderer) this.renderer.lastActivity = this.lastActivity / 1000;
-    if (this.settings.idlePlaybackEnabled) {
-      this.setPlaybackSuspended(true);
-      this.scheduleIdleResume();
-    }
-  };
-
-  private scheduleIdleResume() {
-    window.clearTimeout(this.idleResumeTimeoutId);
-    if (!this.settings.idlePlaybackEnabled) return;
-    const delayMs = this.settings.idlePlaybackDelaySec * 1000;
-    this.idleResumeTimeoutId = window.setTimeout(() => {
-      const idleFor = performance.now() - this.lastActivity;
-      if (idleFor >= delayMs) this.setPlaybackSuspended(false);
-    }, delayMs);
-  }
-
-  private syncPlaybackGate() {
-    if (!this.renderer) return;
-    if (!this.settings.idlePlaybackEnabled) {
-      window.clearTimeout(this.idleResumeTimeoutId);
-      this.setPlaybackSuspended(false);
-      return;
-    }
-
-    const delayMs = this.settings.idlePlaybackDelaySec * 1000;
-    const idleFor = performance.now() - this.lastActivity;
-    if (idleFor >= delayMs) this.setPlaybackSuspended(false);
-    else {
-      this.setPlaybackSuspended(true);
-      this.scheduleIdleResume();
-    }
-  }
-
-  private setPlaybackSuspended(suspended: boolean) {
-    if (this.playbackSuspended === suspended) return;
-    this.playbackSuspended = suspended;
-    this.canvas?.classList.toggle('hidden', suspended);
-    if (!this.renderer) return;
-    if (suspended) {
-      this.renderer.stop();
-      return;
-    }
-    this.capture?.requestSoon();
-    this.renderer.start();
-  }
-
-  private computeTokenLevel(): number {
-    if (this.settings.sizeMode !== 1) return -1;
-    try {
-      switch (this.settings.tokenMetric) {
-        case 'word-count': {
-          const mdView = this.app.workspace.getActiveViewOfType(MarkdownView);
-          if (!mdView) return -1;
-          const text: string = mdView.editor?.getValue() ?? '';
-          const words = text.match(/\S+/g)?.length ?? 0;
-          return Math.min(words / this.settings.maxWordCount, 1.0);
-        }
-        case 'global-word-count': {
-          const files = this.app.vault.getMarkdownFiles();
-          return Math.min(files.length * 500 / this.settings.maxWordCount, 1.0);
-        }
-        case 'file-count': {
-          const files = this.app.vault.getMarkdownFiles();
-          return Math.min(files.length / 1000, 1.0);
-        }
-        case 'tab-count': {
-          const leaves = this.app.workspace.getLeavesOfType('markdown');
-          return Math.min(leaves.length / 20, 1.0);
-        }
-        default: return -1;
-      }
-    } catch (e) {
-      console.error('BlackHole: token-metric computation failed.', e);
-      return -1;
-    }
-  }
 
   private findCaptureTarget(): HTMLElement | null {
-    // Capture the whole window so the lensed snapshot lines up with whatever
-    // the (window-wide) canvas is drawn over.
-    return (document.querySelector('.app-container')
-      ?? document.querySelector('.workspace')
-      ?? document.body) as HTMLElement | null;
+    return document.querySelector<HTMLElement>('.app-container')
+      ?? document.querySelector<HTMLElement>('.workspace') ?? document.body;
   }
 }

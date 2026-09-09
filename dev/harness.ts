@@ -9,20 +9,9 @@
 import { BlackHoleRenderer } from '../src/renderer';
 import { ShaderParams } from '../src/shader';
 
-// Default params — mirrors src/settings.ts DEFAULT_SETTINGS (+ the glide consts
-// that main.ts injects in toShaderParams). Kept here so the harness has no
-// dependency on the Obsidian-only settings module.
-const DEFAULTS: ShaderParams = {
-  holeRadius: 0.02, lensDepth: 13, starGain: 0.6,
-  diskInner: 1.8, diskOuter: 8, diskIncl: 1.5, diskRoll: 0.35,
-  diskGain: 2.2, diskOpacity: 0.9, diskTemp: 5500, dopplerMix: 0.6,
-  diskBeam: 2.5, diskSpeed: 5, diskWind: 7, diskContrast: 1.6,
-  exposure: 1.4, driftSpeed: 1, workArea: 0.33, dilationMin: 0.2,
-  tokenAreaMin: 0.01, tokenAreaMax: 0.5, tokenHomeX: 0.96, tokenHomeY: 0.04,
-  tokenEase: 1, tokenReach: 1, tokenCalm: 0.04, tokenRush: 1.1, nSteps: 48,
-  workPeriodMin: 55, breakMin: 5, idleFadeSec: 90,
-  tokenGlideMin: 0.3, tokenGlideMax: 1.5, tokenGlideRate: 10,
-};
+import { DEFAULT_SETTINGS } from '../src/config';
+
+const DEFAULTS: ShaderParams = { ...DEFAULT_SETTINGS, tokenGlideMin: 0.3, tokenGlideMax: 1.5, tokenGlideRate: 10 };
 
 // A curated subset of tunables exposed as sliders (the visually interesting
 // ones). [key, label, min, max, step]
@@ -41,7 +30,7 @@ const CONTROLS: [keyof ShaderParams, string, number, number, number][] = [
   ['diskBeam', 'Beaming', 0, 10, 0.1],
   ['diskSpeed', 'Disk speed', 0, 10, 0.1],
   ['exposure', 'Exposure', 0.2, 3, 0.05],
-  ['nSteps', 'N steps', 8, 128, 2],
+  ['nSteps', 'N steps', 48, 96, 8],
   ['tokenEase', 'Token ease', 0.2, 4, 0.1],
 ];
 
@@ -143,18 +132,20 @@ function buildUI(
   }
 }
 
-function start() {
+async function start() {
   const stage = document.getElementById('stage')!;
   const canvas = document.createElement('canvas');
   stage.appendChild(canvas);
 
   const params: ShaderParams = { ...DEFAULTS };
   const renderer = new BlackHoleRenderer(canvas, params);
-  if (!renderer.init()) {
+  if (!await renderer.init({ allowSoftware: true })) {
     stage.innerHTML = '<p style="color:#f66;padding:2rem">WebGL2 not available in this browser.</p>';
     return;
   }
 
+  renderer.setRenderScale(DEFAULT_SETTINGS.renderScale);
+  renderer.captureEnabled = true;
   renderer.updateTexture(makeMockTexture(1600, 1000));
   renderer.sizeMode = 2; // demo
   renderer.lastActivity = performance.now() / 1000;
@@ -167,7 +158,7 @@ function start() {
   let pending = 0;
   const onParam = () => {
     if (pending) return;
-    pending = window.setTimeout(() => { pending = 0; renderer.recompile(params); }, 60);
+    pending = window.setTimeout(() => { pending = 0; void renderer.recompile(params); }, 60);
   };
 
   buildUI(renderer, params, onParam);

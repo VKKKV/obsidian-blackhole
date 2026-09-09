@@ -1,4 +1,4 @@
-/* Black Hole canvas overlay — covers the whole Obsidian window, transparent
+/* Black Hole canvas overlay — cropped around the moving effect, transparent
    except where the hole renders. pointer-events:none keeps the UI clickable. */
 .blackhole-canvas {
   position: fixed;

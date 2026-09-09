@@ -1,164 +1,366 @@
 /**
- * Workspace capture module.
- *
- * Captures the active Obsidian workspace leaf content to a canvas using
- * `dom-to-image-more`. The plugin periodically triggers captures and uploads
- * the result to the WebGL texture.
- *
- * dom-to-image clones the DOM subtree and computes styles for every node on
- * the MAIN THREAD — for a large note this can take hundreds of ms and freeze
- * the UI. To stay responsive we:
- *   - capture at a modest base cadence (not every frame),
- *   - measure how long each capture took and back the interval off when slow
- *     (so a slow vault can never spend more time capturing than rendering),
- *   - allow capture to be disabled entirely (the lens then warps the
- *     starfield/background only — still a black hole, zero main-thread cost),
- *   - disable ourselves after repeated failures.
+ * Opt-in, dirty-driven workspace snapshots. DOM cloning/computed styles still
+ * run on the main thread: preflight limits and a circuit breaker reduce risk,
+ * but neither a timeout nor a smaller output canvas can interrupt that work.
  */
-
 import * as domToImage from 'dom-to-image-more';
 
-const DEFAULT_INTERVAL = 1500;  // ms between captures (base cadence)
-const MAX_INTERVAL = 4000;      // upper bound when backing off
-const DEFAULT_SCALE = 0.25;      // sub-res capture for performance
-const SLOW_BACKOFF = 3;         // next interval >= lastDuration × this
+const DEFAULT_INTERVAL = 1500;
+const DEFAULT_SCALE = 0.25; // Output resolution only, not a DOM-cost control.
+const SLOW_BACKOFF = 3;
 const MAX_CONSECUTIVE_FAILURES = 5;
+const MAX_CAPTURE_MS = 1000;
+const MAX_PREFLIGHT_MS = 8;
+const MAX_NODES = 1000;
+const MAX_DEPTH = 80;
+const MAX_TEXT_CHARS = 100_000;
+const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+const EXCLUDED_TAGS = new Set([
+  'img', 'picture', 'source', 'video', 'audio', 'track', 'canvas',
+  'iframe', 'frame', 'frameset', 'object', 'embed', 'script', 'style',
+  'link', 'base', 'meta', 'svg', 'image', 'use', 'input', 'slot', 'template',
+]);
+
+// dom-to-image-more has module-global render state. Even a replacement instance
+// must wait for a destroyed instance's underlying operation to actually settle.
+let libraryBusy = false;
 
 type CaptureListener = (canvas: HTMLCanvasElement, captureTime: number) => void;
+type AvailabilityListener = (available: boolean) => void;
 type CaptureOptions = domToImage.Options & {
   filterUrls?: (url: string, baseUrl?: string) => boolean;
+  preserveScroll?: boolean;
+  loadExternalStyleSheet?: boolean;
+  adjustPseudoElement?: () => false;
 };
 
+function includeNode(node: Node): boolean {
+  if (node.nodeType !== 1) return node.nodeType === 3;
+  const el = node as Element;
+  // Avoid resource-bearing nodes BEFORE cloneNode(false), not in onclone when
+  // assigning src may already have started a load. Custom elements/shadow hosts
+  // are excluded because their constructors/rendered subtree aren't bounded here.
+  return el.namespaceURI === HTML_NAMESPACE &&
+    !EXCLUDED_TAGS.has(el.localName) && !el.localName.includes('-') &&
+    !el.hasAttribute('is') && !el.shadowRoot &&
+    !el.classList.contains('blackhole-canvas');
+}
+
+function includeStyle(_node: Node, name: string): boolean {
+  if (name === 'background-color') return true; // Pure colors cannot fetch resources.
+  // Strip common CSS resource-bearing properties, including custom properties
+  // that could feed them. This is defense in depth, not a zero-request guarantee:
+  // browser style copying and third-party internals are not a network sandbox.
+  return !/^(--|background|border-image|list-style|mask|-webkit-mask|cursor|content|filter|backdrop-filter|-webkit-filter|clip-path|shape-outside|offset-path|animation|transition)/.test(name);
+}
+
+function notify(callback: (() => void) | null): boolean {
+  if (!callback) return true;
+  try {
+    // Async functions are assignable to void callbacks; consume their rejection
+    // too, without letting listener failures escape the capture promise chain.
+    void Promise.resolve(callback()).catch((error: unknown) => {
+      console.error('BlackHole: capture listener rejected.', error);
+    });
+    return true;
+  } catch (error) {
+    console.error('BlackHole: capture listener threw.', error);
+    return false;
+  }
+}
+
 export class WorkspaceCapture {
-  private lastCapture = 0;
   private el: HTMLElement | null = null;
   private failed = false;
   private failures = 0;
-  private inFlight = false;          // don't overlap captures
+  private inFlight = false;
+  private generation = 0;
+  private dirty = true;
+  private suspended = false;
+  private destroyed = false;
+  private captureEnabled = false;
+  private available = false;
+  private availabilityListener: AvailabilityListener | null = null;
+  private lastCompletion = -Infinity;
+  private lastDuration = 0;
   private baseInterval = DEFAULT_INTERVAL;
-  private currentInterval = DEFAULT_INTERVAL;
   private scale = DEFAULT_SCALE;
+  private deadlineTimer: ReturnType<typeof setTimeout> | null = null;
 
-  public enabled = true;
   public onCapture: CaptureListener | null = null;
-
-  /** The most recent successfully captured canvas. */
   latestCanvas: HTMLCanvasElement | null = null;
-
-  /** Time of the latest successful capture (monotonic). */
+  /** Time of the latest successful capture (performance.now() clock). */
   latestCaptureTime = 0;
 
-  setElement(el: HTMLElement | null) { this.el = el; }
-
-  /** Tune cadence / resolution / on-off from settings. */
-  setOptions(opts: { enabled?: boolean; intervalMs?: number; scale?: number }) {
-    if (opts.enabled !== undefined) {
-      const wasEnabled = this.enabled;
-      this.enabled = opts.enabled;
-      if (!wasEnabled && this.enabled) this.reset();
-    }
-    if (opts.intervalMs !== undefined) {
-      this.baseInterval = Math.max(100, opts.intervalMs);
-      this.currentInterval = Math.max(this.currentInterval, this.baseInterval);
-    }
-    if (opts.scale !== undefined) this.scale = Math.max(0.1, Math.min(1, opts.scale));
+  get enabled(): boolean { return this.captureEnabled; }
+  set enabled(value: boolean) {
+    if (this.destroyed || value === this.captureEnabled) return;
+    this.captureEnabled = value;
+    if (value) this.reset();
+    else this.invalidate();
   }
 
-  /**
-   * Trigger an async capture. Returns `true` if a capture was initiated.
-   * Resolves by updating `latestCanvas` when dom-to-image finishes.
-   * Rate-limited and self-throttling.
-   */
+  get onAvailabilityChange(): AvailabilityListener | null {
+    return this.availabilityListener;
+  }
+  set onAvailabilityChange(listener: AvailabilityListener | null) {
+    if (this.destroyed) return;
+    this.availabilityListener = listener;
+    // A newly wired renderer must learn that no snapshot exists yet.
+    if (listener) notify(() => listener(this.available));
+  }
+
+  setElement(el: HTMLElement | null) {
+    if (this.destroyed || this.el === el) return;
+    this.el = el;
+    this.invalidate();
+  }
+
+  setSuspended(suspended: boolean) {
+    if (this.destroyed || suspended === this.suspended) return;
+    this.suspended = suspended;
+    this.invalidate();
+  }
+
+  /** Tune cadence / output resolution / opt-in state; invalid numbers are ignored. */
+  setOptions(opts: { enabled?: boolean; intervalMs?: number; scale?: number }) {
+    if (this.destroyed) return;
+    if (opts.intervalMs !== undefined && Number.isFinite(opts.intervalMs)) {
+      this.baseInterval = Math.max(100, opts.intervalMs);
+    }
+    if (opts.scale !== undefined && Number.isFinite(opts.scale)) {
+      const scale = Math.max(0.1, Math.min(1, opts.scale));
+      if (scale !== this.scale) {
+        this.scale = scale;
+        this.invalidate();
+      }
+    }
+    if (opts.enabled !== undefined) this.enabled = opts.enabled;
+  }
+
+  /** Poll using performance.now(); returns true only when toCanvas was started. */
   capture(now: number): boolean {
-    if (!this.enabled || this.failed || !this.el || this.inFlight) return false;
-    if (now - this.lastCapture < this.currentInterval) return false;
+    if (this.destroyed || !this.enabled || this.suspended || this.failed ||
+        !this.el || this.inFlight || libraryBusy || !this.dirty) return false;
+    // Cool down AFTER completion. No cap may shorten the user's base interval.
+    const interval = Math.max(this.baseInterval, this.lastDuration * SLOW_BACKOFF);
+    if (!Number.isFinite(now) || now - this.lastCompletion < interval) return false;
 
     const el = this.el;
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    if (w === 0 || h === 0) return false;
-    this.lastCapture = now;
-
+    const generation = this.generation;
     const started = performance.now();
-    this.inFlight = true;
+    let width: number;
+    let height: number;
     try {
-      const options: CaptureOptions = {
-        width: w,
-        height: h,
-        scale: this.scale,
-        // CRITICAL: do not let dom-to-image fetch fonts or images. In Obsidian
-        // those resolve to `app://` URLs served by the *main process* protocol
-        // handler, which decodeURIComponent()s the path and throws an uncaught
-        // "URI malformed" — crashing the whole app. A renderer try/catch can't
-        // catch a main-process throw, so we must avoid issuing the request.
-        // The lensed texture only needs the workspace text/layout, not media.
-        disableEmbedFonts: true,
-        disableInlineImages: true,
-        // reading cross-origin stylesheet cssRules can also throw synchronously
-        ignoreCSSRuleErrors: true,
-        // Faster, slightly less exact cache keys for computed styles.
-        styleCaching: 'relaxed',
-        // belt-and-suspenders: block any remaining non-data URL from being fetched
-        filterUrls: (url: string) => url.startsWith('data:'),
-        filter: (n: Node) => {
-          // skip the blackhole canvas to avoid infinite recursion
-          if (n instanceof HTMLElement && n.classList.contains('blackhole-canvas'))
-            return false;
-          return true;
-        },
-      };
-
-      domToImage.toCanvas(el, options).then((canvas: HTMLCanvasElement) => {
-        this.latestCanvas = canvas;
-        this.latestCaptureTime = performance.now();
-        this.failures = 0;
-        this.adjustInterval(performance.now() - started);
-        this.onCapture?.(canvas, this.latestCaptureTime);
-      }).catch((e: unknown) => {
-        this.noteFailure(e);
-      }).then(() => {
-        this.inFlight = false;
-      });
-    } catch (e) {
-      // dom-to-image can throw synchronously (e.g. reading cross-origin
-      // stylesheet rules) before it ever returns a promise.
-      this.inFlight = false;
-      this.noteFailure(e);
+      if (!el.isConnected) {
+        this.invalidate();
+        return false;
+      }
+      const unsafe = this.preflight(el, started);
+      if (unsafe) {
+        this.trip(unsafe);
+        return false;
+      }
+      width = el.offsetWidth;
+      height = el.offsetHeight;
+      if (width <= 0 || height <= 0) {
+        this.invalidate();
+        return false;
+      }
+      if (performance.now() - started > MAX_PREFLIGHT_MS) {
+        this.trip('DOM preflight/layout exceeded its time budget');
+        return false;
+      }
+    } catch (error) {
+      this.recordCompletion(started);
+      this.noteFailure(error);
       return false;
     }
 
-    return true;
-  }
+    this.inFlight = true;
+    libraryBusy = true;
+    this.dirty = false;
+    this.deadlineTimer = setTimeout(() => {
+      this.deadlineTimer = null;
+      if (this.isCurrent(generation, el)) this.trip('capture deadline exceeded');
+      // Do NOT release either lock here: the library operation is still running.
+      // Timers also cannot preempt synchronous cloning or a microtask backlog.
+    }, MAX_CAPTURE_MS);
 
-  /** Widen the interval when a capture is expensive so we never spend more
-   *  time blocking the main thread than the budget allows. */
-  private adjustInterval(durationMs: number) {
-    this.currentInterval = Math.min(
-      MAX_INTERVAL,
-      Math.max(this.baseInterval, Math.round(durationMs * SLOW_BACKOFF)),
-    );
-  }
+    const settle = (canvas: HTMLCanvasElement | null, error?: unknown) => {
+      this.clearDeadline();
+      this.recordCompletion(started);
+      try {
+        if (!this.isCurrent(generation, el)) return;
+        if (!el.isConnected) {
+          this.invalidate();
+          return;
+        }
+        if (this.lastDuration >= MAX_CAPTURE_MS) {
+          this.trip('capture exceeded its time budget');
+          return;
+        }
+        if (!canvas) {
+          this.noteFailure(error);
+          return;
+        }
+        this.latestCanvas = canvas;
+        this.latestCaptureTime = this.lastCompletion;
+        this.failures = 0;
+        const listener = this.onCapture;
+        const delivered = notify(listener ? () => listener(canvas, this.latestCaptureTime) : null);
+        // Listeners may disable, change the target, reset, or destroy us.
+        if (!this.isCurrent(generation, el)) return;
+        if (!delivered) {
+          this.noteFailure(new Error('capture listener failed'));
+          return;
+        }
+        this.setAvailability(true);
+      } finally {
+        // Only real settlement releases the lock, including stale generations.
+        this.inFlight = false;
+        libraryBusy = false;
+      }
+    };
 
-  private noteFailure(e: unknown) {
-    this.failures++;
-    if (this.failures >= MAX_CONSECUTIVE_FAILURES) {
-      this.failed = true;
-      console.error(
-        `BlackHole: workspace capture failed ${this.failures}× — disabling capture; ` +
-        `the shader will render disk/starfield only.`, e,
-      );
+    try {
+      const options: CaptureOptions = {
+        width,
+        height,
+        scale: this.scale,
+        preserveScroll: true,
+        // Keep resource inlining disabled, especially for Obsidian app:// URLs.
+        disableEmbedFonts: true,
+        disableInlineImages: true,
+        ignoreCSSRuleErrors: true,
+        loadExternalStyleSheet: false,
+        styleCaching: 'relaxed',
+        filterUrls: (url: string) => url.startsWith('data:'),
+        filter: includeNode,
+        filterStyles: includeStyle,
+        adjustClonedNode: (_original: Node, clone: Node) => {
+          if (clone.nodeType !== 1) return clone;
+          const element = clone as Element;
+          // Original inline styles otherwise bypass filterStyles in the library.
+          // This hook runs before computed-style copying (also after children).
+          element.removeAttribute('style');
+          for (const attribute of Array.from(element.attributes)) {
+            if (/^(on|src|poster$|background$|data$|href$|xlink:href$)/i.test(attribute.name)) {
+              element.removeAttribute(attribute.name);
+            }
+          }
+          return clone;
+        },
+        // Pseudo-elements can contain url() resources independent of filterStyles.
+        adjustPseudoElement: () => false,
+      };
+      void Promise.resolve(domToImage.toCanvas(el, options)).then(
+        (canvas: HTMLCanvasElement) => settle(canvas),
+        (error: unknown) => settle(null, error),
+      ).catch((error: unknown) => {
+        // Last-resort containment for unexpected settlement/DOM accessor errors.
+        if (this.isCurrent(generation, el)) this.noteFailure(error);
+      });
+      return true;
+    } catch (error) {
+      settle(null, error);
+      return false;
     }
   }
 
-  /** Reset failure/backoff state (e.g. after a mode change). */
-  reset() {
-    this.failed = false;
-    this.failures = 0;
-    this.currentInterval = this.baseInterval;
+  /** Bounded traversal: no full querySelectorAll/clone/style read during preflight. */
+  private preflight(root: HTMLElement, started: number): string | null {
+    if (!includeNode(root)) return 'unsupported capture root';
+    let node: Node | null = root;
+    let count = 0;
+    let depth = 0;
+    let textChars = 0;
+    while (node) {
+      if (++count > MAX_NODES || depth > MAX_DEPTH) return 'DOM node/depth limit exceeded';
+      if (node.nodeType === 3) textChars += (node.nodeValue ?? '').length;
+      if (textChars > MAX_TEXT_CHARS) return 'DOM text limit exceeded';
+      if ((count & 31) === 0 && performance.now() - started > MAX_PREFLIGHT_MS) {
+        return 'DOM preflight exceeded its time budget';
+      }
+      if (includeNode(node) && node.firstChild) {
+        node = node.firstChild;
+        depth++;
+        continue;
+      }
+      while (node !== root && !node.nextSibling) {
+        node = node.parentNode;
+        depth--;
+        if (!node) return 'DOM changed during preflight';
+      }
+      if (node === root) break;
+      node = node.nextSibling;
+    }
+    return null;
   }
 
-  /** Force the next poll to capture immediately (e.g. content changed). */
-  requestSoon() { this.lastCapture = 0; }
+  private isCurrent(generation: number, el: HTMLElement): boolean {
+    return generation === this.generation && this.el === el &&
+      !this.destroyed && this.enabled && !this.suspended && !this.failed;
+  }
+
+  private recordCompletion(started: number) {
+    this.lastCompletion = performance.now();
+    this.lastDuration = Math.max(0, this.lastCompletion - started);
+  }
+
+  private setAvailability(available: boolean) {
+    this.available = available;
+    const listener = this.availabilityListener;
+    if (listener) notify(() => listener(available));
+  }
+
+  private invalidate() {
+    this.generation++;
+    this.dirty = true;
+    this.latestCanvas = null;
+    this.latestCaptureTime = 0;
+    this.setAvailability(false);
+  }
+
+  private trip(reason: string) {
+    this.failed = true;
+    this.invalidate();
+    console.warn(`BlackHole: workspace capture disabled: ${reason}. Toggle capture off/on to retry.`);
+  }
+
+  private noteFailure(error: unknown) {
+    this.failures++;
+    if (this.failures >= MAX_CONSECUTIVE_FAILURES) this.failed = true;
+    this.invalidate();
+    console.warn('BlackHole: workspace capture failed; using background only.', error);
+  }
+
+  /** Explicit retry after a failure. Never releases a running operation or cooldown. */
+  reset() {
+    if (this.destroyed) return;
+    this.failed = false;
+    this.failures = 0;
+    this.invalidate();
+  }
+
+  /** Mark changed content; does not bypass cooldown, suspension, or a tripped circuit. */
+  requestSoon() { if (!this.destroyed) this.dirty = true; }
+
+  destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.captureEnabled = false;
+    this.el = null;
+    this.clearDeadline();
+    this.invalidate();
+    this.onCapture = null;
+    this.availabilityListener = null;
+  }
+
+  private clearDeadline() {
+    if (this.deadlineTimer !== null) clearTimeout(this.deadlineTimer);
+    this.deadlineTimer = null;
+  }
 
   /** A transparent placeholder canvas to seed the texture before first capture. */
   static blankCanvas(w: number, h: number): HTMLCanvasElement {

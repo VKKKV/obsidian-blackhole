@@ -7,7 +7,9 @@
     "build": "node esbuild.config.js production",
     "dev": "node esbuild.config.js",
     "harness": "node esbuild.config.js harness",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.cjs",
+    "check": "npm run typecheck && npm test"
   },
   "keywords": [],
   "author": "Kita",
@@ -15,7 +17,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "builtin-modules": "^3.3.0",
-    "esbuild": "^0.20.0",
+    "esbuild": "^0.25.10",
     "obsidian": "^1.7.0",
     "tslib": "^2.6.0",
     "typescript": "^5.3.0"

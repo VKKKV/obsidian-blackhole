@@ -1,58 +1,38 @@
 const esbuild = require('esbuild');
 const builtins = require('builtin-modules');
-const fs = require('fs');
+const path = require('node:path');
 
-const mode = process.argv[2]; // 'production' | 'harness' | undefined (dev watch)
+const mode = process.argv[2];
 const prod = mode === 'production';
+const outArg = process.argv.find(arg => arg.startsWith('--outdir='));
+const outdir = outArg ? path.resolve(outArg.slice('--outdir='.length)) : '.';
 
 async function main() {
-  // Standalone shader harness — bundles renderer + shader (no Obsidian deps),
-  // watches for changes, and serves dev/ on localhost for fast visual iteration.
   if (mode === 'harness') {
     const ctx = await esbuild.context({
-      entryPoints: ['dev/harness.ts'],
-      bundle: true,
-      format: 'iife',
-      target: 'es2020',
-      platform: 'browser',
-      sourcemap: 'inline',
-      outfile: 'dev/harness.js',
-      logLevel: 'info',
+      entryPoints: ['dev/harness.ts'], bundle: true, format: 'iife',
+      target: 'es2020', platform: 'browser', sourcemap: 'inline',
+      outfile: 'dev/harness.js', logLevel: 'info',
     });
     await ctx.watch();
-    const { port } = await ctx.serve({ servedir: 'dev', port: 8000 });
-    console.log(`Shader harness: http://localhost:${port}/`);
+    const { port } = await ctx.serve({ servedir: 'dev', host: '127.0.0.1', port: 8000 });
+    console.log(`Shader harness: http://127.0.0.1:${port}/`);
     return;
   }
-
-  const ctx = await esbuild.context({
-    entryPoints: ['src/main.ts'],
-    bundle: true,
-    external: [
-      'obsidian',
-      'electron',
-      ...builtins,
-    ],
-    format: 'cjs',
-    target: 'es2020',
-    platform: 'browser',
-    sourcemap: prod ? false : 'inline',
-    treeShaking: true,
-    outfile: 'main.js',
-    logLevel: 'info',
-  });
-
+  const options = {
+    entryPoints: ['src/main.ts'], bundle: true,
+    external: ['obsidian', 'electron', ...builtins],
+    format: 'cjs', target: 'es2020', platform: 'browser',
+    sourcemap: prod ? false : 'inline', treeShaking: true,
+    outfile: path.join(outdir, 'main.js'), logLevel: 'info',
+  };
   if (prod) {
-    await ctx.rebuild();
-    console.log('Build complete: main.js');
-    process.exit(0);
+    await esbuild.build(options);
+    console.log(`Build complete: ${options.outfile}`);
   } else {
+    const ctx = await esbuild.context(options);
     await ctx.watch();
     console.log('Watching for changes...');
   }
 }
-
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main().catch(error => { console.error(error); process.exitCode = 1; });

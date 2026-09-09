@@ -54,32 +54,25 @@ export interface ShaderParams {
  * constants — the shader gets the same optimisation benefits as the original
  * Ghostty version, and the compile cost is paid once per settings change.
  */
-export function makeFS(p: ShaderParams, useMediump = false): string {
+export function makeFS(p: ShaderParams): string {
   return `#version 300 es
-precision ${useMediump ? 'mediump' : 'highp'} float;
-precision ${useMediump ? 'mediump' : 'highp'} int;
+precision highp float;
+precision highp int;
 
 // ---- uniforms (set by renderer every frame) ----
 uniform vec2  uResolution;
 uniform float uTime;
-uniform float uTimeDelta;
-uniform int   uFrame;
 uniform sampler2D uTexture;
-uniform vec4  uDate;
-uniform float uLastActivity;
-uniform float uTokenLevel;
-uniform float uTokenPrev;
-uniform float uTokenChangeTime;
 uniform int   uSizeMode;
 uniform int   uCaptureEnabled;
 uniform vec2  uViewportOrigin;
 uniform vec2  uViewportSize;
+uniform vec4 uEffect; // center (top-left UV), radius, intensity
 
 in vec2 vUv;
 out vec4 fragColor;
 
 // ---- tunable consts (injected from settings) ----
-const float HOLE_RADIUS   = ${p.holeRadius.toFixed(4)};
 const float LENS_DEPTH    = ${p.lensDepth.toFixed(4)};
 const float STAR_GAIN     = ${p.starGain.toFixed(4)};
 const float DISK_INNER    = ${p.diskInner.toFixed(4)};
@@ -96,28 +89,10 @@ const float DISK_WIND     = ${p.diskWind.toFixed(4)};
 const float DISK_CONTRAST = ${p.diskContrast.toFixed(4)};
 const float EXPOSURE      = ${p.exposure.toFixed(4)};
 const float DRIFT_SPEED   = ${p.driftSpeed.toFixed(4)};
-const float WORK_AREA     = ${p.workArea.toFixed(4)};
 const float DILATION_MIN  = ${p.dilationMin.toFixed(4)};
-const float TOKEN_AREA_MIN= ${p.tokenAreaMin.toFixed(4)};
-const float TOKEN_AREA_MAX= ${p.tokenAreaMax.toFixed(4)};
-const float TOKEN_HOME_X  = ${p.tokenHomeX.toFixed(4)};
-const float TOKEN_HOME_Y  = ${p.tokenHomeY.toFixed(4)};
-const float TOKEN_EASE    = ${p.tokenEase.toFixed(4)};
-const float TOKEN_REACH   = ${p.tokenReach.toFixed(4)};
-const float TOKEN_CALM    = ${p.tokenCalm.toFixed(4)};
-const float TOKEN_RUSH    = ${p.tokenRush.toFixed(4)};
-const float WORK_PERIOD_MIN = ${p.workPeriodMin.toFixed(4)};
-const float BREAK_MIN       = ${p.breakMin.toFixed(4)};
-const float IDLE_FADE_SEC   = ${p.idleFadeSec.toFixed(4)};
-const float TOKEN_GLIDE_MIN  = ${p.tokenGlideMin.toFixed(4)};
-const float TOKEN_GLIDE_MAX  = ${p.tokenGlideMax.toFixed(4)};
-const float TOKEN_GLIDE_RATE = ${p.tokenGlideRate.toFixed(4)};
-const float TIME_SCALE      = 1.0000;
 const float DEMO_SEC        = 42.0000;
-const float DEMO_GROW_SEC   = 40.0000;
 const float DEMO_XFADE      = 0.1800;
 const float ALPHA_EPS       = 0.0100;
-const float SIZE_GAIN       = 0.5500;
 
 const int N_STEPS = ${p.nSteps};
 const int MODE_POMODORO = 0;
@@ -219,17 +194,9 @@ DiskLook demoLook() {
     return mixLook(DEMO_TOUR[i], DEMO_TOUR[(i + 1) % DEMO_N], f);
 }
 
-// --------------------------------------------------------------- token glide --
-float glidedToken(float cur, float prev, float tChange) {
-    if (cur < 0.0) return -1.0;
-    if (prev < 0.0) return cur;
-    float T = clamp(abs(cur - prev) * TOKEN_GLIDE_RATE, TOKEN_GLIDE_MIN, TOKEN_GLIDE_MAX);
-    return mix(prev, cur, smoothstep(0.0, T, uTime - tChange));
-}
-
 // ------------------------------------------------------------------- image --
 void main() {
-    vec2 uv = uViewportOrigin + vUv * uViewportSize;
+    vec2 uv = uViewportOrigin + vec2(vUv.x, 1.0 - vUv.y) * uViewportSize;
     vec2  res    = uResolution;
     float aspect = res.x / res.y;
     float t = uTime * DRIFT_SPEED;
@@ -240,67 +207,11 @@ void main() {
     float rin  = max(L.inner, 1.6);
     float rout = max(L.outer, rin + 0.5);
 
-    float I, sz;
-    vec2  center;
-
-    if (uSizeMode == MODE_POMODORO) {
-        float workSec  = WORK_PERIOD_MIN * 60.0;
-        float cycleSec = workSec + BREAK_MIN * 60.0;
-        float wall     = uDate.w + uTime * (TIME_SCALE - 1.0);
-        float phase    = mod(wall, cycleSec);
-        float collapse = min(60.0, workSec * 0.15);
-        float grow = clamp(phase / workSec, 0.0, 1.0)
-                   * (1.0 - smoothstep(workSec - collapse, workSec, phase));
-        I = mix(0.12, 1.0, grow);
-        float idle = max(0.0, uTime - uLastActivity);
-        I *= 1.0 - smoothstep(IDLE_FADE_SEC, max(BREAK_MIN * 60.0, IDLE_FADE_SEC + 1.0), idle);
-        sz = mix(0.22, 1.0, I);
-        float ext = (rout / B_CRIT) * HOLE_RADIUS * sz * SIZE_GAIN;
-        float yLo = WORK_AREA + 0.12 + ext;
-        float yHi = max(yLo, 0.90 - ext);
-        float spd = mix(0.35, 1.0, I);
-        center = vec2(
-            0.5 + (0.24 * sin(t * 0.21) + 0.05 * sin(t * 0.083)) * spd,
-            1.0 - mix(yLo, yHi, 0.5 + (0.42 * sin(t * 0.157 + 2.0) + 0.08 * sin(t * 0.117)) * spd));
-        center += I * vec2(0.040 * sin(t * 0.83) + 0.020 * sin(t * 1.31),
-                           0.030 * sin(t * 1.03 + 1.0));
-    } else {
-        float lvl;
-        if (uSizeMode == MODE_DEMO) {
-            lvl = min(mod(uTime, DEMO_SEC) / DEMO_GROW_SEC, 1.0);
-        } else {
-            lvl = glidedToken(uTokenLevel, uTokenPrev, uTokenChangeTime);
-        }
-        if (lvl < 0.0) { fragColor = vec4(0.0); return; }
-        float g = pow(clamp(lvl, 0.0, 1.0), TOKEN_EASE);
-        I = mix(0.10, 1.0, g);
-        float rhMin = sqrt(TOKEN_AREA_MIN * aspect / 3.1415927);
-        float rhMax = sqrt(TOKEN_AREA_MAX * aspect / 3.1415927);
-        float rhT = mix(rhMin, rhMax, g) * (HOLE_RADIUS / 0.08) * SIZE_GAIN;
-        sz = rhT / max(HOLE_RADIUS, 1e-4);
-        float marg = min(rhT * mix(1.45, 0.90, g), 0.5 * (1.0 - WORK_AREA - 0.03));
-        float xPad = marg / aspect;
-        vec2  fullLo = vec2(min(xPad, 0.5), marg);
-        vec2  fullHi = vec2(max(0.5, 1.0 - xPad),
-                            max(marg, 1.0 - (WORK_AREA + 0.03 + marg)));
-        vec2  corner = clamp(vec2(TOKEN_HOME_X, TOKEN_HOME_Y), fullLo, fullHi);
-        float reach  = mix(0.06, max(TOKEN_REACH, 0.06), g);
-        vec2  lo = vec2(mix(corner.x, fullLo.x, reach), fullLo.y);
-        vec2  hi = vec2(fullHi.x, mix(corner.y, fullHi.y, reach));
-        vec2  room   = max((hi - lo) * 0.5, vec2(0.0));
-        vec2  wobAmp = min(vec2(0.010 + 0.030 * g), max(room * 0.35, vec2(0.006)));
-        vec2  ampEff = max(room - wobAmp, vec2(0.0));
-        vec2  wander = mix(lissa(t * TOKEN_CALM), lissa(t * TOKEN_RUSH), g);
-        center = (lo + hi) * 0.5 + wander * ampEff
-               + wobAmp * vec2(cos(t * 0.8), sin(t * 1.0));
-    }
-
+    float I = uEffect.w;
+    vec2 center = uEffect.xy;
+    float rh = uEffect.z;
     float vis = smoothstep(0.0, 0.10, I);
-    if (vis <= 0.0) {
-        fragColor = vec4(0.0);
-        return;
-    }
-    float rh = HOLE_RADIUS * sz * SIZE_GAIN;
+    if (vis <= 0.0 || rh <= 0.0) { fragColor = vec4(0.0); return; }
     float dil = mix(1.0, DILATION_MIN, I);
     // Overlay model: the canvas is transparent except near the hole, so the
     // live Obsidian DOM shows through everywhere else. "shield" is the effect
@@ -328,6 +239,7 @@ void main() {
     // far field
     if (b >= bmax) {
         vec3  term = vec3(0.0);
+        float sampleAlpha = 0.0;
         if (uCaptureEnabled != 0) {
             float uu   = Z0 * inversesqrt(Z0 * Z0 + b * b);
             float defl = (2.0 / (W * W)) / max(plen, 1e-4)
@@ -336,7 +248,9 @@ void main() {
             vec2  dir  = p / max(plen, 1e-5);
             vec2  sp   = p - dir * defl;
             vec2  suv  = mirrorUV(center + sp / vec2(aspect, 1.0));
-            term = texture(uTexture, suv).rgb;
+            vec4 sampleColor = texture(uTexture, suv);
+            term = sampleColor.rgb;
+            sampleAlpha = sampleColor.a;
         }
         vec3 sky = vec3(0.0);
         if (L.star > 0.0) {
@@ -345,7 +259,7 @@ void main() {
         }
         // straight-alpha overlay: coverage fades out away from the hole so the
         // live DOM shows through; near the hole we reveal the lensed sample.
-        float a = clamp(cover, 0.0, 1.0);
+        float a = clamp(max(cover * sampleAlpha, max(sky.r, max(sky.g, sky.b))), 0.0, 1.0);
         fragColor = vec4(term + sky, a);
         return;
     }
@@ -417,6 +331,7 @@ void main() {
     if (!captured && dot(x, x) < 4.0) captured = true;
 
     vec3 bg = vec3(0.0);
+    float sampleAlpha = 0.0;
     if (!captured) {
         vec3 dd = normalize(v);
         if (L.star > 0.0) {
@@ -429,7 +344,9 @@ void main() {
             vec2  sp  = vec2(q.x, -q.y);
             vec2  suv = mirrorUV(center + (p + (sp - p) * cover) / vec2(aspect, 1.0));
             float toward = smoothstep(0.05, 0.35, -dd.z);
-            bg += texture(uTexture, suv).rgb * toward;
+            vec4 sampleColor = texture(uTexture, suv);
+            sampleAlpha = sampleColor.a * toward;
+            bg += sampleColor.rgb * sampleColor.a * toward;
         }
     }
 
@@ -438,7 +355,7 @@ void main() {
     vec3 col = bg * trans + emitRGB;
     // Coverage: opaque inside the shadow, bright where the disk emits, and the
     // lensing window elsewhere — transparent (live DOM) far from the hole.
-    float a = captured ? 1.0 : clamp(max(cover, emitLum), 0.0, 1.0);
+    float a = captured ? 1.0 : clamp(max(cover * sampleAlpha, max(emitLum, max(bg.r, max(bg.g, bg.b)))), 0.0, 1.0);
     fragColor = vec4(col, a);
 }
 `;

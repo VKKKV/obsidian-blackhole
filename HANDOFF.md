@@ -1,4 +1,6 @@
-# Obsidian Black Hole — Handoff
+# Obsidian Black Hole — Historical Handoff
+
+> Historical notes below describe earlier revisions and contain superseded performance claims. Current refactor, verification commands, deployment boundary and remaining Obsidian acceptance work are in [REVIEW.md](REVIEW.md). Do not treat the old “fixed” checklist as current test evidence.
 
 > 给下一个 AI 的完整上下文。项目已构建（build 通过）。已做过多轮修复：bug 修复、错误处理加固、性能/GPU、以及**渲染模型重构（透明全窗口 overlay）**。仍需在真实 Obsidian 中充分验证视觉效果（GLSL alpha 合成无法在无 GPU 的环境里验证）。
 

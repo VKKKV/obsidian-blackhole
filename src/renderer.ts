@@ -69,14 +69,7 @@ export class BlackHoleRenderer {
   // uniform locations
   private uResolution!: WebGLUniformLocation;
   private uTime!: WebGLUniformLocation;
-  private uTimeDelta!: WebGLUniformLocation;
-  private uFrame!: WebGLUniformLocation;
   private uTexture!: WebGLUniformLocation;
-  private uDate!: WebGLUniformLocation;
-  private uLastActivity!: WebGLUniformLocation;
-  private uTokenLevel!: WebGLUniformLocation;
-  private uTokenPrev!: WebGLUniformLocation;
-  private uTokenChangeTime!: WebGLUniformLocation;
   private uSizeMode!: WebGLUniformLocation;
   private uCaptureEnabled!: WebGLUniformLocation;
   private uViewportOrigin!: WebGLUniformLocation;
@@ -97,18 +90,29 @@ export class BlackHoleRenderer {
   public autoQuality = true;
   /** Backing-store resolution factor (CSS px × this). The canvas is stretched
    *  to 100% via CSS, so < 1 renders fewer fragments — a big GPU win. */
-  public renderScale = 1.0;
-  private readonly minRenderScale = 0.25;
+  public renderScale = 0.35;
+  private readonly minRenderScale = 0.15;
   private dtAvg = 0;            // EMA of frame time (s)
   private lastScaleAdjust = 0;  // timestamp guard for auto-downscale
 
   private prevTime = 0;
   private lastDrawTime = 0;
-  private frameCount = 0;
   private startTime = 0;
   private frameIntervalMs = DEFAULT_FRAME_INTERVAL_MS;
   private viewportRect: EffectBounds | null = null;
   private resizeObserver: ResizeObserver;
+  private disposed = false;
+  private compileGeneration = 0;
+  private effectState = { x: 0.5, y: 0.5, radius: 0, intensity: 0 };
+  private uEffect!: WebGLUniformLocation;
+  public onFatalError: ((reason: string) => void) | null = null;
+  public lastError = '';
+  private contextLost = (event: Event) => {
+    event.preventDefault();
+    this.stop();
+    this.lastError = 'WebGL context lost; toggle the effect to retry.';
+    this.onFatalError?.(this.lastError);
+  };
 
   constructor(canvas: HTMLCanvasElement, params: ShaderParams) {
     this.canvas = canvas;
@@ -116,7 +120,7 @@ export class BlackHoleRenderer {
     this.resizeObserver = new ResizeObserver(() => this.resize());
   }
 
-  init(): boolean {
+  async init(options: { allowSoftware?: boolean } = {}): Promise<boolean> {
     const gl = this.canvas.getContext('webgl2', {
       alpha: true, premultipliedAlpha: false,
       antialias: false, preserveDrawingBuffer: false,
@@ -126,8 +130,9 @@ export class BlackHoleRenderer {
       // Let the compositor present without forcing main-thread sync each frame.
       desynchronized: true,
     });
-    if (!gl) return false;
+    if (!gl) { this.lastError = 'WebGL2 context unavailable.'; return false; }
     this.gl = gl;
+    this.canvas.addEventListener('webglcontextlost', this.contextLost);
 
     // Report which GPU we actually got. If Electron handed us a software
     // rasterizer (SwiftShader / llvmpipe), the shader will be unusably slow —
@@ -141,21 +146,16 @@ export class BlackHoleRenderer {
       this.softwareRenderer = /swiftshader|llvmpipe|software|basic render/i.test(rendererName);
       if (this.softwareRenderer) {
         this.frameIntervalMs = SOFTWARE_FRAME_INTERVAL_MS;
-        const isWayland = typeof navigator !== 'undefined' && /Wayland|wayland/i.test(navigator.userAgent);
-        console.warn(
-          'BlackHole: running on a SOFTWARE WebGL renderer (' + rendererName + '). ' +
-          'Hardware GPU is not being used for WebGL.\n' +
-          (isWayland
-            ? 'This is a known Electron+Wayland+NVIDIA issue. Fix:\n' +
-              '  Run Obsidian with --ozone-platform=x11 via ~/.config/obsidian/user-flags.conf\n' +
-              '  (created automatically — restart Obsidian to apply).'
-            : 'Check that your GPU drivers are installed and Obsidian/Electron is not started with --disable-gpu.\n' +
-              '  See Settings > Appearance > Advanced and ensure "Hardware acceleration" is ON.'),
-        );
+        if (!options.allowSoftware) {
+          this.lastError = 'Software WebGL detected. Effect disabled to protect the editor; enable hardware acceleration and restart Obsidian.';
+          console.warn('BlackHole:', this.lastError);
+          return false;
+        }
       }
     } catch { /* debug ext unavailable — assume hardware */ }
 
-    if (!this.buildProgram()) return false;
+    if (!await this.buildProgram(this.params)) return false;
+    if (this.disposed || this.gl !== gl || gl.isContextLost()) return false;
 
     // fullscreen quad VAO
     this.vao = gl.createVertexArray()!;
@@ -192,20 +192,18 @@ export class BlackHoleRenderer {
   }
 
   /** Recompile with new shader params (e.g. after settings change). */
-  recompile(params: ShaderParams) {
-    this.params = { ...params };
-    const oldProgram = this.program;
-    if (!this.buildProgram()) return;
-    if (oldProgram && this.gl) this.gl.deleteProgram(oldProgram);
+  async recompile(params: ShaderParams): Promise<boolean> {
+    return this.buildProgram({ ...params });
   }
 
   start() {
-    if (this.running) return;
+    if (this.running || this.disposed || !this.program) return;
     this.running = true;
     this.prevTime = performance.now();
+    this.dtAvg = 0;
     this.lastDrawTime = 0;
     this.startTime = this.prevTime;
-    this.loop(this.prevTime);
+    this.animId = requestAnimationFrame(this.loop);
   }
 
   stop() {
@@ -231,6 +229,7 @@ export class BlackHoleRenderer {
 
   /** Set the backing-store resolution factor and re-size immediately. */
   setRenderScale(scale: number) {
+    if (!Number.isFinite(scale)) return;
     this.renderScale = Math.max(this.minRenderScale, Math.min(1, scale));
     if (this.viewportRect) this.updateViewportRect(this.viewportRect);
     else this.resize();
@@ -241,7 +240,10 @@ export class BlackHoleRenderer {
   }
 
   destroy() {
+    this.disposed = true;
+    this.compileGeneration++;
     this.stop();
+    this.canvas.removeEventListener('webglcontextlost', this.contextLost);
     this.resizeObserver.disconnect();
     const gl = this.gl;
     if (gl && this.program) gl.deleteProgram(this.program);
@@ -257,59 +259,73 @@ export class BlackHoleRenderer {
 
   // ---- internal ----
 
-  private buildProgram(): boolean {
-    const gl = this.gl!;
-
-    const vs = this.compile(gl.VERTEX_SHADER, VS);
-    const fs = this.compile(gl.FRAGMENT_SHADER, makeFS(this.params, this.softwareRenderer));
-    if (!vs || !fs) return false;
-
-    const prog = gl.createProgram()!;
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.bindAttribLocation(prog, POSITION_ATTRIB_LOCATION, 'aPos');
-    gl.linkProgram(prog);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error('Shader link error:', gl.getProgramInfoLog(prog));
-      gl.deleteProgram(prog);
+  private async buildProgram(params: ShaderParams): Promise<boolean> {
+    const gl = this.gl;
+    if (!gl || this.disposed) return false;
+    const generation = ++this.compileGeneration;
+    const vs = gl.createShader(gl.VERTEX_SHADER);
+    const fs = gl.createShader(gl.FRAGMENT_SHADER);
+    const prog = gl.createProgram();
+    if (!vs || !fs || !prog) {
+      if (vs) gl.deleteShader(vs);
+      if (fs) gl.deleteShader(fs);
+      if (prog) gl.deleteProgram(prog);
+      this.lastError = 'Unable to allocate WebGL program.';
       return false;
     }
-
-    this.program = prog;
-    gl.useProgram(prog);
-
+    let accepted = false;
+    try {
+      gl.shaderSource(vs, VS);
+      gl.shaderSource(fs, makeFS(params));
+      gl.compileShader(vs);
+      gl.compileShader(fs);
+      gl.attachShader(prog, vs);
+      gl.attachShader(prog, fs);
+      gl.bindAttribLocation(prog, POSITION_ATTRIB_LOCATION, 'aPos');
+      gl.linkProgram(prog);
+      const parallel = gl.getExtension('KHR_parallel_shader_compile');
+      const deadline = performance.now() + 5000;
+      if (parallel) {
+        while (!gl.getProgramParameter(prog, parallel.COMPLETION_STATUS_KHR)) {
+          if (this.disposed || generation !== this.compileGeneration || gl.isContextLost()) return false;
+          if (performance.now() > deadline) throw new Error('Shader compilation exceeded 5s budget.');
+          await new Promise<void>(resolve => setTimeout(resolve, 16));
+        }
+      } else {
+        // Yield before the driver status query. Without the extension this query
+        // can still block; a JS timeout cannot preempt a stalled driver.
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+      }
+      if (this.disposed || generation !== this.compileGeneration || gl.isContextLost()) return false;
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        throw new Error(gl.getProgramInfoLog(prog) || gl.getShaderInfoLog(fs) || 'Shader link failed');
+      }
+      const oldProgram = this.program;
+      this.program = prog;
+      this.params = params;
+      gl.useProgram(prog);
+      if (oldProgram) gl.deleteProgram(oldProgram);
+      accepted = true;
     // locate uniforms
     this.uResolution = gl.getUniformLocation(prog, 'uResolution')!;
     this.uTime = gl.getUniformLocation(prog, 'uTime')!;
-    this.uTimeDelta = gl.getUniformLocation(prog, 'uTimeDelta')!;
-    this.uFrame = gl.getUniformLocation(prog, 'uFrame')!;
     this.uTexture = gl.getUniformLocation(prog, 'uTexture')!;
-    this.uDate = gl.getUniformLocation(prog, 'uDate')!;
-    this.uLastActivity = gl.getUniformLocation(prog, 'uLastActivity')!;
-    this.uTokenLevel = gl.getUniformLocation(prog, 'uTokenLevel')!;
-    this.uTokenPrev = gl.getUniformLocation(prog, 'uTokenPrev')!;
-    this.uTokenChangeTime = gl.getUniformLocation(prog, 'uTokenChangeTime')!;
     this.uSizeMode = gl.getUniformLocation(prog, 'uSizeMode')!;
     this.uCaptureEnabled = gl.getUniformLocation(prog, 'uCaptureEnabled')!;
     this.uViewportOrigin = gl.getUniformLocation(prog, 'uViewportOrigin')!;
     this.uViewportSize = gl.getUniformLocation(prog, 'uViewportSize')!;
 
-    return true;
-  }
-
-  private compile(type: number, source: string): WebGLShader | null {
-    const gl = this.gl!;
-    const shader = gl.createShader(type)!;
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
+      this.uEffect = gl.getUniformLocation(prog, 'uEffect')!;
+      return true;
+    } catch (error) {
+      this.lastError = String(error);
+      console.error('BlackHole: shader build failed', error);
+      return false;
+    } finally {
+      gl.deleteShader(vs);
+      gl.deleteShader(fs);
+      if (!accepted) gl.deleteProgram(prog);
     }
-    return shader;
   }
 
   private loop = (now: number) => {
@@ -325,27 +341,35 @@ export class BlackHoleRenderer {
       // Log it once and stop the loop rather than spam the console.
       console.error('BlackHole: render loop error — stopping renderer.', e);
       this.stop();
+      this.onFatalError?.('Render loop failed.');
     }
   };
 
   private renderFrame(now: number) {
     const gl = this.gl!;
-    const dt = Math.min((now - this.prevTime) / 1000, 0.1);
+    const dt = Math.min((now - this.prevTime) / 1000, 1);
     this.prevTime = now;
-    this.frameCount++;
 
-    // Adaptive quality: if frames stay slow, drop the render scale (never auto
-    // -raise). This self-recovers even when the UI is too frozen to reach
-    // settings — the most likely escape hatch on a software renderer.
+    // Compare actual draw cadence with the intended cadence, not a fixed
+    // 30 FPS threshold that penalizes our own 18 FPS throttle.
+    const targetSeconds = this.frameIntervalMs / 1000;
     this.dtAvg = this.dtAvg ? this.dtAvg * 0.9 + dt * 0.1 : dt;
-    if (this.autoQuality && (now - this.startTime) > 3000 && this.dtAvg > 0.033
-        && this.renderScale > this.minRenderScale && now - this.lastScaleAdjust > 2000) {
+    if (this.autoQuality && this.viewportRect && now - this.startTime > 3000
+        && this.dtAvg > targetSeconds * 1.8 && now - this.lastScaleAdjust > 2000) {
       this.lastScaleAdjust = now;
-      this.setRenderScale(this.renderScale - 0.15);
-      console.warn(
-        `BlackHole: low FPS (~${Math.round(1 / this.dtAvg)}) — render scale → ${this.renderScale.toFixed(2)}`,
-      );
-      this.dtAvg = 0.025; // settle before re-evaluating
+      if (this.renderScale > this.minRenderScale) this.setRenderScale(this.renderScale - 0.05);
+      else {
+        this.stop();
+        this.onFatalError?.('Rendering exceeded the frame budget at minimum quality.');
+        return;
+      }
+      this.dtAvg = targetSeconds;
+    }
+    if (this.lastTokenLevel !== this.tokenLevel) {
+      const current = this.glidedToken(now / 1000, this.lastTokenLevel);
+      this.prevTokenLevel = current;
+      this.lastTokenLevel = this.tokenLevel;
+      this.lastTokenChange = now / 1000;
     }
 
     gl.useProgram(this.program);
@@ -376,23 +400,11 @@ export class BlackHoleRenderer {
       viewportRect.height / viewportSize.height,
     );
     gl.uniform1f(this.uTime, now / 1000);
-    gl.uniform1f(this.uTimeDelta, dt);
-    gl.uniform1i(this.uFrame, this.frameCount);
-    gl.uniform1f(this.uLastActivity, this.lastActivity);
-    gl.uniform4f(this.uDate, d.getFullYear(), d.getMonth() + 1, d.getDate(),
-                 d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds());
 
-    // detect target changes: hold the pre-change value as the glide start
-    if (this.lastTokenLevel !== this.tokenLevel) {
-      this.prevTokenLevel = this.lastTokenLevel;
-      this.lastTokenLevel = this.tokenLevel;
-      this.lastTokenChange = now / 1000;
-    }
-    gl.uniform1f(this.uTokenLevel, this.tokenLevel);
-    gl.uniform1f(this.uTokenPrev, this.prevTokenLevel);
-    gl.uniform1f(this.uTokenChangeTime, this.lastTokenChange);
     gl.uniform1i(this.uSizeMode, this.sizeMode);
     gl.uniform1i(this.uCaptureEnabled, this.captureEnabled ? 1 : 0);
+    gl.uniform4f(this.uEffect, this.effectState.x, this.effectState.y,
+      this.effectState.radius, this.effectState.intensity);
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
@@ -499,6 +511,7 @@ export class BlackHoleRenderer {
     if (shield <= 0) return null;
 
     const rh = holeRadius * size * SIZE_GAIN;
+    this.effectState = { x: center.x, y: center.y, radius: rh, intensity };
     const effectRadius = Math.max(
       rh * 3,
       7 * rh * Math.sqrt(-Math.log(EFFECT_ALPHA_CUTOFF / Math.max(shield, EFFECT_ALPHA_CUTOFF))),
@@ -575,8 +588,7 @@ export class BlackHoleRenderer {
     this.canvas.style.height = '0px';
   }
 
-  private glidedToken(nowSec: number): number {
-    const cur = this.tokenLevel;
+  private glidedToken(nowSec: number, cur = this.tokenLevel): number {
     const prev = this.prevTokenLevel;
     if (cur < 0) return -1;
     if (prev < 0) return cur;
