@@ -9,6 +9,7 @@
     "harness": "node esbuild.config.js harness",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.cjs",
+    "test:backdrop": "electron tests/backdrop_electron.cjs",
     "check": "npm run typecheck && npm test"
   },
   "keywords": [],
@@ -17,12 +18,10 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "builtin-modules": "^3.3.0",
+    "dom-to-image-more": "^3.10.0",
     "esbuild": "^0.25.10",
     "obsidian": "^1.7.0",
     "tslib": "^2.6.0",
     "typescript": "^5.3.0"
-  },
-  "dependencies": {
-    "dom-to-image-more": "^3.10.0"
   }
 }

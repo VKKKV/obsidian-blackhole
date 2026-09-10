@@ -64,6 +64,7 @@ uniform vec2  uResolution;
 uniform float uTime;
 uniform float uDemoTime;
 uniform sampler2D uTexture;
+uniform vec4 uCaptureRect;
 uniform int   uSizeMode;
 uniform int   uCaptureEnabled;
 uniform vec2  uViewportOrigin;
@@ -115,6 +116,20 @@ float vnoiseWrapY(vec2 p, float perY) {
     return mix(mix(hash21(vec2(i.x, y0)),       hash21(vec2(i.x + 1.0, y0)), f.x),
                mix(hash21(vec2(i.x, y1)),       hash21(vec2(i.x + 1.0, y1)), f.x),
                f.y);
+}
+
+vec4 workspaceSample(vec2 screenUV) {
+    vec2 uv = (screenUV - uCaptureRect.xy) / max(uCaptureRect.zw, vec2(1e-6));
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec4(0.0);
+    return texture(uTexture, uv);
+}
+
+vec4 lensSample(vec2 destination, vec2 source) {
+    vec2 dest = (destination - uCaptureRect.xy) / max(uCaptureRect.zw, vec2(1e-6));
+    if (any(lessThan(dest, vec2(0.0))) || any(greaterThan(dest, vec2(1.0)))) return vec4(0.0);
+    vec2 local = (source - uCaptureRect.xy) / max(uCaptureRect.zw, vec2(1e-6));
+    vec2 inset = 0.5 / vec2(textureSize(uTexture, 0));
+    return texture(uTexture, clamp(local, inset, vec2(1.0) - inset));
 }
 
 vec2 mirrorUV(vec2 u) { return 1.0 - abs(1.0 - mod(u, 2.0)); }
@@ -229,6 +244,16 @@ void main() {
 
     float window = exp(-pow(plen / (7.0 * rh), 2.0));
     float cover = window * shield;
+    // Fade coordinates to identity BEFORE fading opacity. Blending displaced
+    // text with live, undisplaced DOM draws two copies of every glyph.
+    float warp = cover * smoothstep(0.04, 0.10, cover);
+    float replacement = smoothstep(ALPHA_EPS, 0.03, cover);
+    if (uCaptureEnabled != 0) {
+        vec2 edge = min(uv - uCaptureRect.xy, uCaptureRect.xy + uCaptureRect.zw - uv) * res;
+        float edgePx = min(edge.x, edge.y);
+        warp *= smoothstep(8.0, 24.0, edgePx);
+        replacement *= smoothstep(0.0, 4.0, edgePx);
+    }
     if (cover < ALPHA_EPS) {
         fragColor = vec4(0.0);
         return;
@@ -245,11 +270,11 @@ void main() {
             float uu   = Z0 * inversesqrt(Z0 * Z0 + b * b);
             float defl = (2.0 / (W * W)) / max(plen, 1e-4)
                        * (1.29 * uu + 0.07) * max(LENS_DEPTH - 2.14 * uu + 0.75, 0.0)
-                       * cover;
+                       * warp;
             vec2  dir  = p / max(plen, 1e-5);
             vec2  sp   = p - dir * defl;
             vec2  suv  = mirrorUV(center + sp / vec2(aspect, 1.0));
-            vec4 sampleColor = texture(uTexture, suv);
+            vec4 sampleColor = lensSample(uv, suv);
             term = sampleColor.rgb;
             sampleAlpha = sampleColor.a;
         }
@@ -260,7 +285,7 @@ void main() {
         }
         // straight-alpha overlay: coverage fades out away from the hole so the
         // live DOM shows through; near the hole we reveal the lensed sample.
-        float a = clamp(max(cover * sampleAlpha, max(sky.r, max(sky.g, sky.b))), 0.0, 1.0);
+        float a = clamp(max(replacement * sampleAlpha, max(sky.r, max(sky.g, sky.b))), 0.0, 1.0);
         fragColor = vec4(term + sky, a);
         return;
     }
@@ -332,7 +357,9 @@ void main() {
     if (!captured && dot(x, x) < 4.0) captured = true;
 
     vec3 bg = vec3(0.0);
-    float sampleAlpha = 0.0;
+    // Even a ray that turns away from the captured plane must occlude the
+    // original note. Otherwise the photon-ring region leaks unwarped glyphs.
+    float sampleAlpha = uCaptureEnabled != 0 ? workspaceSample(uv).a : 0.0;
     if (!captured) {
         vec3 dd = normalize(v);
         if (L.star > 0.0) {
@@ -343,10 +370,10 @@ void main() {
             vec3  hp  = x + dd * tpl;
             vec2  q   = rot(hp.xy, -L.roll) / W;
             vec2  sp  = vec2(q.x, -q.y);
-            vec2  suv = mirrorUV(center + (p + (sp - p) * cover) / vec2(aspect, 1.0));
+            vec2  suv = mirrorUV(center + (p + (sp - p) * warp) / vec2(aspect, 1.0));
             float toward = smoothstep(0.05, 0.35, -dd.z);
-            vec4 sampleColor = texture(uTexture, suv);
-            sampleAlpha = sampleColor.a * toward;
+            vec4 sampleColor = lensSample(uv, suv);
+            sampleAlpha = max(sampleAlpha, sampleColor.a);
             bg += sampleColor.rgb * sampleColor.a * toward;
         }
     }
@@ -356,7 +383,7 @@ void main() {
     vec3 col = bg * trans + emitRGB;
     // Coverage: opaque inside the shadow, bright where the disk emits, and the
     // lensing window elsewhere — transparent (live DOM) far from the hole.
-    float a = captured ? 1.0 : clamp(max(cover * sampleAlpha, max(emitLum, max(bg.r, max(bg.g, bg.b)))), 0.0, 1.0);
+    float a = captured ? 1.0 : clamp(max(replacement * sampleAlpha, max(emitLum, max(bg.r, max(bg.g, bg.b)))), 0.0, 1.0);
     fragColor = vec4(col, a);
 }
 `;

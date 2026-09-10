@@ -5,12 +5,12 @@ wraps the [ghostty-blackhole](https://github.com/s0xDk/ghostty-blackhole) shader
 Schwarzschild geodesic ray tracing with accretion disk, photon ring, and relativistic
 Doppler beaming — as a WebGL2 overlay for Obsidian.
 
-![demo](https://github.com/s0xDk/ghostty-blackhole/raw/main/demo.gif)
+![demo](demo.gif)
 
-> Demo GIF from the original Ghostty project, not a recording of this plugin.
-> This plugin adapts its shader; quality, transparency and optional workspace capture differ.
+> Demo GIF for this plugin. It uses the same upstream-inspired shader, with
+> transparent composition and optional live text lensing.
 
-> Refactor status and verified boundaries: [REVIEW.md](REVIEW.md). Hardware WebGL is required; software rendering is safely refused by the plugin. Workspace capture is opt-in and may be disabled automatically on expensive workspaces.
+> Hardware WebGL is required; software rendering is refused. The live text lens is opt-in and requires desktop SVG backdrop-filter support. Real Obsidian acceptance is still pending; verify it in a disposable vault before release.
 
 ## What it does
 
@@ -22,10 +22,9 @@ hole integrates its own null geodesic through the Schwarzschild metric on the
 GPU.
 
 - **Shadow** — rays with impact parameter under `b_crit` spiral through the
-  horizon and return black. Text near the edge is stretched into the photon ring
-  before it disappears.
-- **Gravitational lensing** — escaped rays are projected back onto the workspace
-  "sky" plane: your notes bend, magnify, and mirror inside the Einstein ring.
+  horizon and return black.
+- **Text lens** — an optional SVG displacement filter bends the live backdrop
+  near the hole. This is an approximate lens, not Ghostty's geodesic text sampling.
 - **Accretion disk** — a thin Keplerian disk with blackbody colour from a
   Shakura–Sunyaev temperature profile, shifted and beamed by the relativistic
   factor. The far side arcs over and under the shadow (the _Interstellar_ look).
@@ -45,13 +44,13 @@ size attenuation. The upstream default mode itself is Token; this plugin chooses
 its self-running Demo for the requested out-of-box animation. The tour intentionally
 returns to a small seed every 42 seconds, as upstream does.
 
-Settings → Black Hole → **Restore defaults** restores the animation and performance
-parameters, keeps language and the on/off switch, and turns workspace capture off.
+Settings → Black Hole → **Reset** restores the animation and performance
+parameters, keeps language and the on/off switch, and turns the text lens off.
 Old untouched tiny defaults are migrated; customized settings are preserved—use
-Restore defaults to switch those to the new showcase.
+Reset to switch those to the new showcase.
 
 The overlay is an adaptation, not pixel-identical to Ghostty: it uses transparent
-composition, optional approximate DOM capture, a pixel budget and 64 rather than
+composition, an optional SVG backdrop lens, a pixel budget and 64 rather than
 48 integration steps. Normal compositor presentation, deferred resize and stable crop dimensions
 avoid blank presentations between draws. Hardware FPS still depends on the GPU.
 
@@ -95,35 +94,54 @@ you control over every shader tunable:
 - **Accretion disk**: inner/outer radius, inclination, temperature, opacity,
   Doppler mix, beaming, streak pattern, speed, winding
 - **Pomodoro**: work period, break length, idle fade time
-- **Performance**: geodesic integration steps (N_STEPS), render scale (lower =
-  faster on weak/software GPUs; also auto-drops if the frame rate stays low),
-  capture on/off, and capture interval
+- **Performance**: geodesic integration steps (N_STEPS), resolution and text lens
+  on/off. Lower resolution reduces WebGL work; sustained overload also reduces
+  actual resolution. Software GPUs are not supported.
 
-## How it works
+## No-screenshot architecture
 
-The plugin mounts a dynamically cropped `<canvas>` overlay with `pointer-events: none`,
-so it never intercepts clicks. A **WebGL2** render loop targets 60 FPS on a cropped effect canvas, executing the same GLSL shader used by the original Ghostty version —
-except the final output uses straight alpha, so the canvas is transparent away
-from the hole and your live notes show through:
+Two local overlays share the effect's position and size. A cropped **WebGL2**
+canvas draws the black hole, disk and starfield. An optional **SVG displacement
+filter**, applied through CSS `backdrop-filter`, bends the live content behind
+the lens. The overlays use `pointer-events: none`; notes stay interactive.
 
-| Ghostty                                    | Obsidian                                                      |
-| ------------------------------------------ | ------------------------------------------------------------- |
-| `iChannel0` (terminal pixels)              | `uTexture` (your workspace, captured via `dom-to-image-more`) |
-| Token level, activity and wall-clock state | CPU effect state → `uEffect` center/radius/intensity          |
-| `SIZE_MODE` compile-time define            | `uSizeMode` runtime uniform                                   |
+The text lens does not clone notes, take DOM screenshots or upload workspace
+images to WebGL. Scrolling and typing update the live backdrop, not a cached
+snapshot. No screen capture, recording permission or screen-sharing prompt is
+needed. `dom-to-image-more` and old capture tests are legacy diagnostics, not
+the current plugin rendering path.
 
-Ghostty samples the terminal as a free GPU texture; Obsidian's notes are DOM,
-which WebGL can't sample directly. Optional `dom-to-image-more` snapshots run
-on the main thread; decoupling their cadence does not make DOM cloning nonblocking.
-Snapshots are requested on content/layout/scroll changes, with a cooldown measured
-from completion and bounded-DOM preflight. Slow or failed capture falls back to
-black-hole/disk/starfield rendering without a workspace texture. Capture filters
-media and resource styles, so it is an approximate text/layout snapshot.
+Enable **Text lens** in settings. Its saved key remains `captureEnabled` for
+compatibility. The old `captureIntervalMs` setting is unused; there is no capture
+interval control.
+
+### Desktop support and cost
+
+The target is desktop Obsidian with hardware WebGL2 and Chromium/Electron support
+for SVG filters in `backdrop-filter`. Mobile is not supported. Support varies
+with Electron, GPU drivers and compositor behavior. An unsupported lens shows
+a short notice; the black-hole effect does not require text lensing.
+
+No screenshots does not mean no GPU cost. The local backdrop filter adds
+compositing and displacement work. Large lens areas and high display density
+can still stutter. Turn off **Text lens** to remove that extra work. The WebGL
+pixel budget below does not cap the browser's backdrop-filter cost. The lens
+separately limits its output rectangle to 1,048,576 device pixels by reducing
+its reach on large/HiDPI scenes; this is not a bound on compositor time.
+
+This is an approximate screen-space text lens, not Ghostty-equivalent rendering.
+Ghostty samples terminal pixels along shader rays; this plugin distorts a live
+backdrop separately from its black-hole shader. The upstream GIF is a reference,
+not proof of matching appearance. Real Obsidian visual and performance acceptance
+remains pending.
 
 The plugin rejects software WebGL before compiling the effect. On hardware it
 uses 64 integration steps by default and a cropped canvas with a maximum
-262,144 backing pixels. The requested render scale defaults to 0.75; the pixel
-budget reduces actual resolution on large windows without shrinking the effect.
+2,097,152 backing pixels, at most 4096 per axis. The requested resolution defaults
+to 100% of display resolution (device pixel ratio capped at 2). Large windows
+respect the pixel cap without shrinking the effect; sustained overload reduces
+the actual post-cap resolution, not the saved setting. Existing resolution choices
+are preserved; set Resolution to 1 or use Reset for the new full-resolution default.
 GPU fences prevent queued frames from accumulating. Reducing integration to 6–10 steps is not a supported performance
 mode: it prevents representative rays from reaching the black hole.
 
@@ -139,12 +157,15 @@ npm run build    # production build to root main.js; may trigger Hot Reload
 ```
 
 The **harness** renders the shader over mock "notes" in a plain browser page
-with live param sliders, so you can iterate on the shader (the bulk of the
-work) without launching Obsidian. The playground explicitly permits software WebGL for
-testing, unlike the plugin. Its procedural texture is not a screenshot of the DOM.
-Optional real-WebGL tests: `python tests/webgl_smoke.py` and
-`python tests/animation_smoke.py` (Python Playwright and Pillow required). The animation test
-saves sampled screenshots and compositor-retention checks under `/tmp/blackhole-animation-artifacts`.
+with live param sliders, so you can iterate on the shader without launching Obsidian.
+The playground explicitly permits software WebGL for testing, unlike the plugin. Its
+procedural texture is not a screenshot of the DOM.
+
+A separate `tests/backdrop_electron.cjs` smoke test exercises the lens in an isolated
+Electron profile with `electron tests/backdrop_electron.cjs`. The browser scripts require
+Python Playwright and a local Chromium executable; set
+`CHROMIUM_EXECUTABLE=/absolute/path/to/chrome` when needed. These checks do not
+replace acceptance in a real Obsidian vault.
 
 ## License
 

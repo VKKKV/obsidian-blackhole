@@ -1,4 +1,5 @@
 import { VS, makeFS, ShaderParams } from './shader';
+import type { LensFrame } from './backdrop';
 
 const POSITION_ATTRIB_LOCATION = 0;
 const MODE_POMODORO = 0;
@@ -7,7 +8,9 @@ const DEMO_SEC = 42;
 const DEMO_GROW_SEC = 40;
 const B_CRIT = 2.5980762;
 const EFFECT_ALPHA_CUTOFF = 0.01;
-const MAX_RENDER_PIXELS = 262_144;
+const MAX_RENDER_PIXELS = 2_097_152;
+const MAX_RENDER_DIMENSION = 4096;
+const MAX_DEVICE_PIXEL_RATIO = 2;
 const VIEWPORT_PAD_PX = 24;
 const VIEWPORT_SNAP_PX = 32;
 const DEFAULT_FRAME_INTERVAL_MS = 1000 / 60;
@@ -74,6 +77,8 @@ export class BlackHoleRenderer {
   private gpuFence: WebGLSync | null = null;
   private fenceCreatedAt = 0;
   private uTexture!: WebGLUniformLocation;
+  private uCaptureRect!: WebGLUniformLocation;
+  private captureRect: EffectBounds = { x: 0, y: 0, width: 1, height: 1 };
   private uSizeMode!: WebGLUniformLocation;
   private uCaptureEnabled!: WebGLUniformLocation;
   private uViewportOrigin!: WebGLUniformLocation;
@@ -92,9 +97,10 @@ export class BlackHoleRenderer {
   public softwareRenderer = false;
   /** When true, auto-drop render scale if frames stay slow. */
   public autoQuality = true;
-  /** Backing-store resolution factor (CSS px × this). The canvas is stretched
-   *  to 100% via CSS, so < 1 renders fewer fragments — a big GPU win. */
-  public renderScale = 0.75;
+  /** Requested fraction of display resolution; pixel and GPU budgets apply below. */
+  public renderScale = 1;
+  private qualityFactor = 1;
+  private readonly minQualityFactor = 0.25;
   private readonly minRenderScale = 0.15;
   private dtAvg = 0;            // EMA of frame time (s)
   private lastScaleAdjust = 0;  // timestamp guard for auto-downscale
@@ -111,6 +117,7 @@ export class BlackHoleRenderer {
   private uEffect!: WebGLUniformLocation;
   public onFatalError: ((reason: string) => void) | null = null;
   public lastError = '';
+  public onEffectFrame: ((frame: LensFrame | null) => void) | null = null;
   private contextLost = (event: Event) => {
     event.preventDefault();
     this.stop();
@@ -218,9 +225,10 @@ export class BlackHoleRenderer {
   }
 
   /** Upload a captured workspace canvas to the texture. */
-  updateTexture(captureCanvas: HTMLCanvasElement) {
+  updateTexture(captureCanvas: HTMLCanvasElement, rect: EffectBounds = { x: 0, y: 0, width: 1, height: 1 }) {
     if (!this.gl || !this.workspaceTex) return;
     const gl = this.gl;
+    this.captureRect = { ...rect };
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.workspaceTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, captureCanvas);
@@ -236,7 +244,9 @@ export class BlackHoleRenderer {
   /** Request a backing-store scale change for the next complete draw. */
   setRenderScale(scale: number) {
     if (!Number.isFinite(scale)) return;
-    this.renderScale = Math.max(this.minRenderScale, Math.min(1, scale));
+    const requested = Math.max(this.minRenderScale, Math.min(1, scale));
+    if (requested !== this.renderScale) this.qualityFactor = 1;
+    this.renderScale = requested;
     // The next draw applies the backing-store change atomically with new pixels.
   }
 
@@ -262,6 +272,7 @@ export class BlackHoleRenderer {
     this.vertexBuffer = null;
     this.workspaceTex = null;
     this.gl = null;
+    this.onEffectFrame = null;
   }
 
   // ---- internal ----
@@ -318,6 +329,7 @@ export class BlackHoleRenderer {
     this.uTime = gl.getUniformLocation(prog, 'uTime')!;
     this.uDemoTime = gl.getUniformLocation(prog, 'uDemoTime')!;
     this.uTexture = gl.getUniformLocation(prog, 'uTexture')!;
+    this.uCaptureRect = gl.getUniformLocation(prog, 'uCaptureRect')!;
     this.uSizeMode = gl.getUniformLocation(prog, 'uSizeMode')!;
     this.uCaptureEnabled = gl.getUniformLocation(prog, 'uCaptureEnabled')!;
     this.uViewportOrigin = gl.getUniformLocation(prog, 'uViewportOrigin')!;
@@ -388,7 +400,9 @@ export class BlackHoleRenderer {
     if (this.autoQuality && this.viewportRect && now - this.startTime > 3000
         && this.dtAvg > Math.max(0.05, targetSeconds * 1.8) && now - this.lastScaleAdjust > 2000) {
       this.lastScaleAdjust = now;
-      if (this.renderScale > this.minRenderScale) this.setRenderScale(this.renderScale - 0.05);
+      if (this.qualityFactor > this.minQualityFactor) {
+        this.qualityFactor = Math.max(this.minQualityFactor, this.qualityFactor * 0.8);
+      }
       else {
         this.stop();
         this.onFatalError?.('Rendering exceeded the frame budget at minimum quality.');
@@ -436,6 +450,8 @@ export class BlackHoleRenderer {
 
     gl.uniform1i(this.uSizeMode, this.sizeMode);
     gl.uniform1i(this.uCaptureEnabled, this.captureEnabled ? 1 : 0);
+    gl.uniform4f(this.uCaptureRect, this.captureRect.x, this.captureRect.y,
+      this.captureRect.width, this.captureRect.height);
     gl.uniform4f(this.uEffect, this.effectState.x, this.effectState.y,
       this.effectState.radius, this.effectState.intensity);
     gl.bindVertexArray(this.vao);
@@ -445,6 +461,13 @@ export class BlackHoleRenderer {
     this.gpuFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
     this.fenceCreatedAt = now;
     gl.flush();
+    this.onEffectFrame?.({
+      x: this.effectState.x * viewportSize.width,
+      y: this.effectState.y * viewportSize.height,
+      radius: this.effectState.radius * viewportSize.height,
+      intensity: this.effectState.intensity, width: viewportSize.width,
+      height: viewportSize.height, depth: this.params.lensDepth,
+    });
   }
 
   private computeEffectBounds(
@@ -568,8 +591,10 @@ export class BlackHoleRenderer {
   private getViewportSize(): { width: number; height: number } | null {
     const parent = this.canvas.parentElement;
     if (!parent) return null;
-    const width = parent.clientWidth;
-    const height = parent.clientHeight;
+    const doc = this.canvas.ownerDocument;
+    const viewport = parent === doc?.body ? doc.defaultView : null;
+    const width = viewport?.innerWidth ?? parent.clientWidth;
+    const height = viewport?.innerHeight ?? parent.clientHeight;
     if (width === 0 || height === 0) return null;
     return { width, height };
   }
@@ -601,9 +626,17 @@ export class BlackHoleRenderer {
 
   private updateViewportRect(rect: EffectBounds) {
     if (!this.gl) return;
-    const requestedScale = Math.max(this.minRenderScale, Math.min(1, this.renderScale));
-    // Bound actual fragments rather than shrinking the visible black hole.
-    const renderScale = Math.min(requestedScale, Math.sqrt(MAX_RENDER_PIXELS / (rect.width * rect.height)));
+    const rawDpr = this.canvas.ownerDocument?.defaultView?.devicePixelRatio ?? 1;
+    const dpr = Number.isFinite(rawDpr) ? clamp(rawDpr, 1, MAX_DEVICE_PIXEL_RATIO) : 1;
+    const requestedScale = clamp(this.renderScale, this.minRenderScale, 1) * dpr;
+    // Apply adaptation AFTER all hard caps: every quality drop must reduce real
+    // fragments, even when a large/HiDPI crop already hits the pixel ceiling.
+    const renderScale = Math.min(
+      requestedScale,
+      Math.sqrt(MAX_RENDER_PIXELS / (rect.width * rect.height)),
+      MAX_RENDER_DIMENSION / rect.width,
+      MAX_RENDER_DIMENSION / rect.height,
+    ) * this.qualityFactor;
     const backingWidth = Math.max(1, Math.floor(rect.width * renderScale));
     const backingHeight = Math.max(1, Math.floor(rect.height * renderScale));
     if (this.canvas.width !== backingWidth || this.canvas.height !== backingHeight) {
@@ -624,6 +657,7 @@ export class BlackHoleRenderer {
   private hideCanvas() {
     this.viewportRect = null;
     this.canvas.style.visibility = 'hidden';
+    this.onEffectFrame?.(null);
   }
 
   private glidedToken(nowSec: number, cur = this.tokenLevel): number {

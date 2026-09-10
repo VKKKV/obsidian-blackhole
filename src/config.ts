@@ -85,7 +85,7 @@ export const DEFAULT_SETTINGS: BlackHoleSettings = {
   workPeriodMin: 55,
   breakMin: 5,
   idleFadeSec: 90,
-  renderScale: 0.75,
+  renderScale: 1,
   captureEnabled: false,
   captureIntervalMs: 2500,
 };
@@ -135,7 +135,7 @@ export function normalizeSettings(data: unknown): BlackHoleSettings {
     settings.tokenAreaMax = DEFAULT_SETTINGS.tokenAreaMax;
     settings.diskOuter = DEFAULT_SETTINGS.diskOuter;
     settings.sizeMode = DEFAULT_SETTINGS.sizeMode;
-    if (source.renderScale === 0.35) settings.renderScale = DEFAULT_SETTINGS.renderScale;
+    if (source.renderScale === 0.35) settings.renderScale = 0.75;
   }
   settings.tokenAreaMax = Math.max(settings.tokenAreaMin, settings.tokenAreaMax);
   settings.diskOuter = Math.max(settings.diskInner + 0.5, settings.diskOuter);

@@ -2,7 +2,7 @@ import { Plugin, Notice, MarkdownView } from 'obsidian';
 import { BlackHoleSettingsTab } from './settings';
 import { BlackHoleSettings, DEFAULT_SETTINGS, normalizeSettings, resetEffectSettings, runtimeRenderScale } from './config';
 import { BlackHoleRenderer } from './renderer';
-import { WorkspaceCapture } from './capture';
+import { BackdropLens } from './backdrop';
 import { t as translate, TranslationKey } from './i18n';
 import { ShaderParams } from './shader';
 import { MetricCache } from './metrics';
@@ -10,7 +10,8 @@ import { MetricCache } from './metrics';
 export default class BlackHolePlugin extends Plugin {
   settings: BlackHoleSettings = { ...DEFAULT_SETTINGS };
   private renderer: BlackHoleRenderer | null = null;
-  private capture: WorkspaceCapture | null = null;
+  private lens: BackdropLens | null = null;
+  private lensUnsupportedNotified = false;
   private canvas: HTMLCanvasElement | null = null;
   private unloaded = false;
   private layoutReady = false;
@@ -21,12 +22,9 @@ export default class BlackHolePlugin extends Plugin {
   private paramsVersion = 0;
   private lastActivity = 0;
   private playbackSuspended = true;
-  private captureAvailable = false;
-  private captureIntervalId = 0;
   private metricIntervalId = 0;
   private idleResumeTimeoutId = 0;
   private recompileTimeoutId = 0;
-  private scrollTimeoutId = 0;
   private metrics = new MetricCache({
     currentText: () => this.app.workspace.getActiveViewOfType(MarkdownView)?.editor?.getValue() ?? null,
     markdownFileCount: () => this.app.vault.getMarkdownFiles().length,
@@ -46,10 +44,8 @@ export default class BlackHolePlugin extends Plugin {
     this.registerDomEvent(document, 'touchstart', this.activityHandler);
     this.registerDomEvent(document, 'wheel', this.activityHandler, { passive: true });
     this.registerDomEvent(document, 'visibilitychange', this.visibilityHandler);
-    this.registerDomEvent(document, 'scroll', this.scrollHandler, { capture: true, passive: true });
     this.registerEvent(this.app.workspace.on('editor-change', () => {
       this.metrics.invalidate('word-count');
-      this.capture?.requestSoon();
     }));
     this.registerEvent(this.app.workspace.on('active-leaf-change', this.refreshTarget));
     this.registerEvent(this.app.workspace.on('file-open', this.refreshTarget));
@@ -94,7 +90,8 @@ export default class BlackHolePlugin extends Plugin {
       const canvas = document.createElement('canvas');
       canvas.className = 'blackhole-canvas hidden';
       this.canvas = canvas;
-      (document.querySelector('.app-container') ?? document.body).appendChild(canvas);
+      // Keep both viewport-fixed overlays outside theme-created workspace backdrop roots.
+      document.body.appendChild(canvas);
       const renderer = new BlackHoleRenderer(canvas, this.toShaderParams());
       this.renderer = renderer;
       renderer.onFatalError = (reason) => {
@@ -117,28 +114,16 @@ export default class BlackHolePlugin extends Plugin {
         if (!this.isCurrent(renderer, generation)) return;
         if (!ok) { this.fail(renderer.lastError || this.t('notice.startFailed')); return; }
       }
-      const capture = new WorkspaceCapture();
-      this.capture = capture;
-      capture.setSuspended(true);
-      capture.setElement(this.findCaptureTarget());
-      capture.onAvailabilityChange = (available) => {
-        if (!this.isCurrent(renderer, generation) || this.capture !== capture) return;
-        this.captureAvailable = available;
-        renderer.captureEnabled = this.settings.captureEnabled && available;
-      };
-      capture.onCapture = (image) => {
-        if (!this.isCurrent(renderer, generation) || this.capture !== capture
-            || this.playbackSuspended || !this.settings.captureEnabled) return;
-        try { renderer.updateTexture(image); }
-        catch (error) { this.fail(String(error)); }
+      const lens = new BackdropLens(canvas.parentElement!);
+      this.lens = lens;
+      lens.setTarget(this.findLensTarget());
+      renderer.onEffectFrame = frame => {
+        if (this.isCurrent(renderer, generation) && this.lens === lens) lens.update(frame);
       };
       this.ready = true;
       renderer.sizeMode = this.settings.sizeMode;
       renderer.lastActivity = this.lastActivity / 1000;
       this.updateMetric();
-      this.captureIntervalId = window.setInterval(() => {
-        if (!this.playbackSuspended && !document.hidden) this.capture?.capture(performance.now());
-      }, 1000);
       this.metricIntervalId = window.setInterval(() => {
         if (!this.playbackSuspended && !document.hidden) this.updateMetric();
       }, 1000);
@@ -157,23 +142,20 @@ export default class BlackHolePlugin extends Plugin {
 
   stop() {
     ++this.generation;
-    window.clearInterval(this.captureIntervalId);
     window.clearInterval(this.metricIntervalId);
     window.clearTimeout(this.idleResumeTimeoutId);
     window.clearTimeout(this.recompileTimeoutId);
-    window.clearTimeout(this.scrollTimeoutId);
-    this.captureIntervalId = this.metricIntervalId = this.idleResumeTimeoutId = 0;
-    this.recompileTimeoutId = this.scrollTimeoutId = 0;
+    this.metricIntervalId = this.idleResumeTimeoutId = 0;
+    this.recompileTimeoutId = 0;
     const renderer = this.renderer;
-    const capture = this.capture;
+    const lens = this.lens;
     this.renderer = null;
-    this.capture = null;
+    this.lens = null;
     this.ready = false;
     this.compiling = false;
-    this.captureAvailable = false;
     this.playbackSuspended = true;
     this.metrics.clear();
-    try { capture?.destroy(); }
+    try { lens?.destroy(); }
     finally {
       try { renderer?.destroy(); }
       finally { this.canvas?.remove(); this.canvas = null; }
@@ -224,10 +206,16 @@ export default class BlackHolePlugin extends Plugin {
 
   applyRuntimeSettings() {
     if (this.renderer && this.ready) {
-      this.renderer.captureEnabled = this.settings.captureEnabled && this.captureAvailable;
+      // The desktop text lens is a live backdrop, never a sampled DOM texture.
+      this.renderer.captureEnabled = false;
       this.renderer.setRenderScale(runtimeRenderScale(this.settings));
     }
-    this.capture?.setOptions({ enabled: this.settings.captureEnabled, intervalMs: Math.max(this.settings.captureIntervalMs, 2500) });
+    this.lens?.setEnabled(this.settings.captureEnabled);
+    this.lens?.setTarget(this.findLensTarget());
+    if (this.settings.captureEnabled && this.lens && !this.lens.supported && !this.lensUnsupportedNotified) {
+      this.lensUnsupportedNotified = true;
+      new Notice(this.t('notice.lensUnsupported'));
+    }
     this.syncPlaybackGate();
   }
 
@@ -244,7 +232,7 @@ export default class BlackHolePlugin extends Plugin {
     this.syncPlaybackGate();
   };
 
-  /** The only path allowed to start rendering or resume capture. */
+  /** The only path allowed to start rendering or resume the lens. */
   private syncPlaybackGate() {
     window.clearTimeout(this.idleResumeTimeoutId);
     this.idleResumeTimeoutId = 0;
@@ -260,14 +248,13 @@ export default class BlackHolePlugin extends Plugin {
     }
     const allowed = eligible && remaining <= 0;
     if (allowed && !this.renderer) { void this.startInternal(); return; }
-    const suspended = !allowed || !this.ready;
+    const suspended = !allowed || !this.ready || this.compiling;
     this.canvas?.classList.toggle('hidden', suspended);
-    this.capture?.setSuspended(suspended);
+    this.lens?.setSuspended(suspended);
     if (!this.renderer || !this.ready) return;
     if (suspended) this.renderer.stop();
     else if (this.playbackSuspended) {
       this.updateMetric();
-      this.capture?.requestSoon();
       this.renderer.start();
     }
     this.playbackSuspended = suspended;
@@ -276,18 +263,8 @@ export default class BlackHolePlugin extends Plugin {
   private refreshTarget = () => {
     if (this.unloaded) return;
     this.metrics.invalidate('word-count', 'tab-count');
-    this.capture?.setElement(this.findCaptureTarget());
-    this.capture?.requestSoon();
-  };
-
-  private scrollHandler = () => {
-    window.clearTimeout(this.scrollTimeoutId);
-    if (!this.capture || this.playbackSuspended) return;
-    const generation = this.generation;
-    this.scrollTimeoutId = window.setTimeout(() => {
-      this.scrollTimeoutId = 0;
-      if (generation === this.generation && !this.playbackSuspended) this.capture?.requestSoon();
-    }, 250);
+    this.lens?.setTarget(this.findLensTarget());
+    this.lens?.refresh();
   };
 
   private updateMetric() {
@@ -354,8 +331,9 @@ export default class BlackHolePlugin extends Plugin {
   }
 
 
-  private findCaptureTarget(): HTMLElement | null {
-    return document.querySelector<HTMLElement>('.app-container')
-      ?? document.querySelector<HTMLElement>('.workspace') ?? document.body;
+  private findLensTarget(): HTMLElement | null {
+    // Do not lens settings, canvases, sidebars or a different native window.
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    return view?.contentEl ?? null;
   }
 }

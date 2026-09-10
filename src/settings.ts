@@ -37,7 +37,6 @@ export class BlackHoleSettingsTab extends PluginSettingTab {
     containerEl.createEl('h3', { text: t('settings.general') });
     new Setting(containerEl)
       .setName(t('settings.language.name'))
-      .setDesc(t('settings.language.desc'))
       .addDropdown((dd) => {
         dd.addOption('auto', t('settings.language.auto'));
         dd.addOption('en', t('settings.language.en'));
@@ -189,6 +188,7 @@ export class BlackHoleSettingsTab extends PluginSettingTab {
         });
       });
 
+    // Keep the persisted captureEnabled key for the live text-lens toggle.
     new Setting(containerEl)
       .setName(t('settings.captureEnabled.name'))
       .setDesc(t('settings.captureEnabled.desc'))
@@ -196,19 +196,6 @@ export class BlackHoleSettingsTab extends PluginSettingTab {
         tg.setValue(this.plugin.settings.captureEnabled);
         tg.onChange(async (v) => {
           this.plugin.settings.captureEnabled = v;
-          await this.plugin.saveSettings();
-          this.plugin.applyRuntimeSettings();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName(t('settings.captureInterval.name'))
-      .setDesc(t('settings.captureInterval.desc'))
-      .addSlider((sl) => {
-        sl.setLimits(2500, 6000, 250); sl.setValue(this.plugin.settings.captureIntervalMs);
-        sl.setDynamicTooltip();
-        sl.onChange(async (v) => {
-          this.plugin.settings.captureIntervalMs = v;
           await this.plugin.saveSettings();
           this.plugin.applyRuntimeSettings();
         });

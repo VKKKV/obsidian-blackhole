@@ -9,8 +9,10 @@ const DEFAULT_INTERVAL = 1500;
 const DEFAULT_SCALE = 0.25; // Output resolution only, not a DOM-cost control.
 const SLOW_BACKOFF = 3;
 const MAX_CONSECUTIVE_FAILURES = 5;
+const MAX_PREFLIGHT_ATTEMPTS = 3;
+const SETTLE_DELAY_MS = 350;
 const MAX_CAPTURE_MS = 1000;
-const MAX_PREFLIGHT_MS = 8;
+const MAX_PREFLIGHT_MS = 100;
 const MAX_NODES = 1000;
 const MAX_DEPTH = 80;
 const MAX_TEXT_CHARS = 100_000;
@@ -25,7 +27,8 @@ const EXCLUDED_TAGS = new Set([
 // must wait for a destroyed instance's underlying operation to actually settle.
 let libraryBusy = false;
 
-type CaptureListener = (canvas: HTMLCanvasElement, captureTime: number) => void;
+export type CaptureRect = { left: number; top: number; width: number; height: number };
+type CaptureListener = (canvas: HTMLCanvasElement, captureTime: number, rect: CaptureRect | null) => void;
 type AvailabilityListener = (available: boolean) => void;
 type CaptureOptions = domToImage.Options & {
   filterUrls?: (url: string, baseUrl?: string) => boolean;
@@ -46,12 +49,45 @@ function includeNode(node: Node): boolean {
     !el.classList.contains('blackhole-canvas');
 }
 
+function placeholderFor(el: Element, style: CSSStyleDeclaration): HTMLElement | null {
+  if (/^(script|style|link|base|meta|source|track|template|slot)$/.test(el.localName)) return null;
+  const rect = el.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const box = el.ownerDocument.createElement('span');
+  // Never clone a resource/custom element; preserve only its measured layout box.
+  for (const name of ['display', 'position', 'float', 'clear', 'vertical-align',
+    'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'top', 'left',
+    'right', 'bottom', 'align-self', 'order', 'grid-area', 'flex-shrink', 'flex-grow']) {
+    box.style.setProperty(name, style.getPropertyValue(name));
+  }
+  box.style.display = style.display === 'inline' ? 'inline-block' : style.display;
+  box.style.boxSizing = 'border-box';
+  box.style.width = `${rect.width}px`;
+  box.style.height = `${rect.height}px`;
+  box.style.visibility = 'hidden';
+  return box;
+}
+
 function includeStyle(_node: Node, name: string): boolean {
   if (name === 'background-color') return true; // Pure colors cannot fetch resources.
   // Strip common CSS resource-bearing properties, including custom properties
   // that could feed them. This is defense in depth, not a zero-request guarantee:
   // browser style copying and third-party internals are not a network sandbox.
   return !/^(--|background|border-image|list-style|mask|-webkit-mask|cursor|content|filter|backdrop-filter|-webkit-filter|clip-path|shape-outside|offset-path|animation|transition)/.test(name);
+}
+
+function captureBackgrounds(root: HTMLElement): string[] {
+  const view = root.ownerDocument?.defaultView;
+  const colors: string[] = [];
+  if (!view) return colors;
+  // The root's own background is already in the snapshot. Only paint ancestors
+  // behind it afterwards; the library's bgcolor option overwrites the root.
+  let node = root.parentElement;
+  for (let depth = 0; node && depth < 80; depth++, node = node.parentElement) {
+    colors.push(view.getComputedStyle(node).backgroundColor);
+  }
+  colors.push('#ffffff');
+  return colors;
 }
 
 function notify(callback: (() => void) | null): boolean {
@@ -73,6 +109,11 @@ export class WorkspaceCapture {
   private el: HTMLElement | null = null;
   private failed = false;
   private failures = 0;
+  private preflightFailures = 0;
+  private notBefore = 0;
+  private observer: MutationObserver | null = null;
+  private observedElement: HTMLElement | null = null;
+  private onNoteScroll = () => this.waitForLayout();
   private inFlight = false;
   private generation = 0;
   private dirty = true;
@@ -88,6 +129,7 @@ export class WorkspaceCapture {
   private deadlineTimer: ReturnType<typeof setTimeout> | null = null;
 
   public onCapture: CaptureListener | null = null;
+  public onBlocked: ((reason: string) => void) | null = null;
   latestCanvas: HTMLCanvasElement | null = null;
   /** Time of the latest successful capture (performance.now() clock). */
   latestCaptureTime = 0;
@@ -98,6 +140,7 @@ export class WorkspaceCapture {
     this.captureEnabled = value;
     if (value) this.reset();
     else this.invalidate();
+    this.watchContent();
   }
 
   get onAvailabilityChange(): AvailabilityListener | null {
@@ -113,13 +156,15 @@ export class WorkspaceCapture {
   setElement(el: HTMLElement | null) {
     if (this.destroyed || this.el === el) return;
     this.el = el;
-    this.invalidate();
+    this.reset();
+    this.watchContent();
   }
 
   setSuspended(suspended: boolean) {
     if (this.destroyed || suspended === this.suspended) return;
     this.suspended = suspended;
     this.invalidate();
+    this.watchContent();
   }
 
   /** Tune cadence / output resolution / opt-in state; invalid numbers are ignored. */
@@ -142,33 +187,41 @@ export class WorkspaceCapture {
   capture(now: number): boolean {
     if (this.destroyed || !this.enabled || this.suspended || this.failed ||
         !this.el || this.inFlight || libraryBusy || !this.dirty) return false;
+    if (this.observer?.takeRecords().length) { this.waitForLayout(); return false; }
     // Cool down AFTER completion. No cap may shorten the user's base interval.
     const interval = Math.max(this.baseInterval, this.lastDuration * SLOW_BACKOFF);
-    if (!Number.isFinite(now) || now - this.lastCompletion < interval) return false;
+    if (!Number.isFinite(now) || now < this.notBefore || now - this.lastCompletion < interval) return false;
 
     const el = this.el;
     const generation = this.generation;
     const started = performance.now();
     let width: number;
     let height: number;
+    let backgrounds: string[] = [];
+    let rect: CaptureRect | null = null;
+    const hiddenNodes = new WeakSet<Node>();
+    const placeholders = new WeakMap<Node, HTMLElement>();
+    const clones = new WeakMap<Node, Node>();
     try {
       if (!el.isConnected) {
         this.invalidate();
         return false;
       }
-      const unsafe = this.preflight(el, started);
+      const unsafe = this.preflight(el, started, hiddenNodes, placeholders);
       if (unsafe) {
-        this.trip(unsafe);
+        this.deferPreflight(unsafe, started);
         return false;
       }
+      rect = el.getBoundingClientRect?.() ?? null;
       width = el.offsetWidth;
       height = el.offsetHeight;
       if (width <= 0 || height <= 0) {
         this.invalidate();
         return false;
       }
+      backgrounds = captureBackgrounds(el);
       if (performance.now() - started > MAX_PREFLIGHT_MS) {
-        this.trip('DOM preflight/layout exceeded its time budget');
+        this.deferPreflight('DOM preflight/layout exceeded its time budget', started);
         return false;
       }
     } catch (error) {
@@ -204,11 +257,32 @@ export class WorkspaceCapture {
           this.noteFailure(error);
           return;
         }
+        const currentRect = el.getBoundingClientRect?.();
+        if (rect && currentRect && ['left', 'top', 'width', 'height'].some(key =>
+          Math.abs(rect![key as keyof CaptureRect] - currentRect[key as keyof CaptureRect]) > 1)) {
+          this.invalidate();
+          return;
+        }
+        if (backgrounds.length) {
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Snapshot 2D context unavailable');
+          ctx.save();
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.globalCompositeOperation = 'destination-over';
+          for (const color of backgrounds) {
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+          ctx.restore();
+          this.recordCompletion(started);
+          if (this.lastDuration >= MAX_CAPTURE_MS) { this.trip('capture exceeded its time budget'); return; }
+        }
         this.latestCanvas = canvas;
         this.latestCaptureTime = this.lastCompletion;
         this.failures = 0;
+        this.preflightFailures = 0;
         const listener = this.onCapture;
-        const delivered = notify(listener ? () => listener(canvas, this.latestCaptureTime) : null);
+        const delivered = notify(listener ? () => listener(canvas, this.latestCaptureTime, rect) : null);
         // Listeners may disable, change the target, reset, or destroy us.
         if (!this.isCurrent(generation, el)) return;
         if (!delivered) {
@@ -227,7 +301,7 @@ export class WorkspaceCapture {
       const options: CaptureOptions = {
         width,
         height,
-        scale: this.scale,
+        scale: Math.min(this.scale, Math.sqrt(1_048_576 / (width * height)), 4096 / width, 4096 / height),
         preserveScroll: true,
         // Keep resource inlining disabled, especially for Obsidian app:// URLs.
         disableEmbedFonts: true,
@@ -236,9 +310,22 @@ export class WorkspaceCapture {
         loadExternalStyleSheet: false,
         styleCaching: 'relaxed',
         filterUrls: (url: string) => url.startsWith('data:'),
-        filter: includeNode,
+        filter: (node: Node) => !hiddenNodes.has(node) && includeNode(node),
         filterStyles: includeStyle,
-        adjustClonedNode: (_original: Node, clone: Node) => {
+        adjustClonedNode: (original: Node, clone: Node, after: boolean) => {
+          clones.set(original, clone);
+          if (after) {
+            // Children excluded by filter still occupy their original layout slot.
+            let next: Node | null = null;
+            for (let child = original.lastChild; child; child = child.previousSibling) {
+              const box = placeholders.get(child);
+              if (box) { clone.insertBefore(box, next); next = box; }
+              else {
+                const childClone = clones.get(child);
+                if (childClone?.parentNode === clone) next = childClone;
+              }
+            }
+          }
           if (clone.nodeType !== 1) return clone;
           const element = clone as Element;
           // Original inline styles otherwise bypass filterStyles in the library.
@@ -269,7 +356,7 @@ export class WorkspaceCapture {
   }
 
   /** Bounded traversal: no full querySelectorAll/clone/style read during preflight. */
-  private preflight(root: HTMLElement, started: number): string | null {
+  private preflight(root: HTMLElement, started: number, hiddenNodes: WeakSet<Node>, placeholders: WeakMap<Node, HTMLElement>): string | null {
     if (!includeNode(root)) return 'unsupported capture root';
     let node: Node | null = root;
     let count = 0;
@@ -282,7 +369,18 @@ export class WorkspaceCapture {
       if ((count & 31) === 0 && performance.now() - started > MAX_PREFLIGHT_MS) {
         return 'DOM preflight exceeded its time budget';
       }
-      if (includeNode(node) && node.firstChild) {
+      if (node.nodeType === 1) {
+        const view = node.ownerDocument?.defaultView;
+        if (view) {
+          const style = view.getComputedStyle(node as Element);
+          if (style.display === 'none') hiddenNodes.add(node);
+          else if (!includeNode(node)) {
+            const box = placeholderFor(node as Element, style);
+            if (box) placeholders.set(node, box);
+          }
+        }
+      }
+      if (!hiddenNodes.has(node) && includeNode(node) && node.firstChild) {
         node = node.firstChild;
         depth++;
         continue;
@@ -322,15 +420,53 @@ export class WorkspaceCapture {
     this.setAvailability(false);
   }
 
+  private deferPreflight(reason: string, started: number) {
+    this.recordCompletion(started);
+    this.preflightFailures++;
+    if (this.preflightFailures >= MAX_PREFLIGHT_ATTEMPTS) {
+      this.trip(reason);
+      return;
+    }
+    // Aborting preflight is cheap; retry after the normal cooldown. Never retry
+    // an expensive completed capture automatically or reset its in-flight lock.
+    this.invalidate();
+    console.debug('BlackHole: capture preflight deferred:', reason);
+  }
+
+  private watchContent() {
+    this.observer?.disconnect();
+    this.observer = null;
+    this.observedElement?.removeEventListener('scroll', this.onNoteScroll, true);
+    this.observedElement = null;
+    if (!this.el || !this.enabled || this.suspended || this.destroyed) return;
+    const Observer = this.el.ownerDocument?.defaultView?.MutationObserver;
+    if (!Observer) return;
+    this.observer = new Observer(() => this.waitForLayout());
+    // Watch only actual note content, not the application or animated canvas.
+    // Attribute changes such as cursor blinking must not starve capture forever.
+    this.observer.observe(this.el, { childList: true, characterData: true, subtree: true });
+    this.observedElement = this.el;
+    this.el.addEventListener('scroll', this.onNoteScroll, { capture: true, passive: true });
+  }
+
+  /** Discard old-note results and wait for editor/layout transitions to settle. */
+  waitForLayout() {
+    if (this.destroyed) return;
+    this.notBefore = Math.max(this.notBefore, performance.now() + SETTLE_DELAY_MS);
+    this.invalidate();
+  }
+
   private trip(reason: string) {
     this.failed = true;
     this.invalidate();
     console.warn(`BlackHole: workspace capture disabled: ${reason}. Toggle capture off/on to retry.`);
+    const listener = this.onBlocked;
+    if (listener) notify(() => listener(reason));
   }
 
   private noteFailure(error: unknown) {
     this.failures++;
-    if (this.failures >= MAX_CONSECUTIVE_FAILURES) this.failed = true;
+    if (this.failures >= MAX_CONSECUTIVE_FAILURES) { this.trip('capture repeatedly failed'); return; }
     this.invalidate();
     console.warn('BlackHole: workspace capture failed; using background only.', error);
   }
@@ -340,6 +476,7 @@ export class WorkspaceCapture {
     if (this.destroyed) return;
     this.failed = false;
     this.failures = 0;
+    this.preflightFailures = 0;
     this.invalidate();
   }
 
@@ -349,11 +486,13 @@ export class WorkspaceCapture {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.watchContent();
     this.captureEnabled = false;
     this.el = null;
     this.clearDeadline();
     this.invalidate();
     this.onCapture = null;
+    this.onBlocked = null;
     this.availabilityListener = null;
   }
 

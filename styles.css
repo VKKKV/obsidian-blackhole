@@ -8,9 +8,17 @@
   /* Float above workspace/sidebars but below modals & menus. */
   z-index: 90;
   opacity: 1;
-  transition: opacity 0.3s ease;
   will-change: transform;
 }
+
+/* Live backdrop under the WebGL artwork, never inside the note subtree. */
+.blackhole-backdrop {
+  position: fixed;
+  pointer-events: none;
+  z-index: 89;
+  background: transparent;
+}
+.blackhole-filter-defs { pointer-events: none; }
 
 /* Hide canvas when plugin is off via class */
 .blackhole-canvas.hidden {

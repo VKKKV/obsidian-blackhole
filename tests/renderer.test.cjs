@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const {loadTS} = require('./helpers.cjs');
 const {DEFAULT_SETTINGS} = loadTS('src/config.ts');
 const params = {...DEFAULT_SETTINGS, tokenGlideMin:.3, tokenGlideMax:1.5, tokenGlideRate:10};
-function fixture({software=false,failLink=false}={}) {
+function fixture({software=false,failLink=false,dpr=1}={}) {
   let draws=0,compiles=0,deleted=0,raf=0;
   const listeners={};
   const gl = new Proxy({
@@ -14,7 +14,7 @@ function fixture({software=false,failLink=false}={}) {
     getProgramInfoLog(){return 'test link failure'},isContextLost(){return false},
     deleteShader(){deleted++},drawArrays(){draws++},
   },{get:(o,k)=>k in o?o[k]:(()=>{})});
-  const canvas={width:1,height:1,style:{},getContext:()=>gl,
+  const canvas={width:1,height:1,style:{},getContext:()=>gl,ownerDocument:{defaultView:{devicePixelRatio:dpr}},
     parentElement:{clientWidth:800,clientHeight:600},
     addEventListener:(name,fn)=>listeners[name]=fn,removeEventListener:(name)=>delete listeners[name]};
   const {BlackHoleRenderer}=loadTS('src/renderer.ts',{}, {
@@ -24,6 +24,19 @@ function fixture({software=false,failLink=false}={}) {
   return {r:new BlackHoleRenderer(canvas,params),gl,canvas,listeners,
     counts:()=>({draws,compiles,deleted,raf})};
 }
+test('viewport-fixed canvas shares center with lens regardless of parent offset',async()=>{
+ const f=fixture();await f.r.init();f.r.autoQuality=false;
+ f.canvas.parentElement.getBoundingClientRect=()=>({left:100,top:32});
+ f.r.computeEffectBounds=()=>{f.r.effectState={x:.5,y:.5,radius:.04,intensity:1};return {x:0,y:0,width:800,height:600}};
+ let frame;f.r.onEffectFrame=value=>frame=value;f.r.renderFrame(10000);
+ assert.equal(frame.x,400);assert.equal(frame.y,300);f.r.destroy();
+});
+test('body-hosted renderer uses viewport height even if body content collapses',async()=>{
+ const f=fixture();await f.r.init();f.canvas.ownerDocument.body=f.canvas.parentElement;
+ Object.assign(f.canvas.ownerDocument.defaultView,{innerWidth:1000,innerHeight:700});
+ f.canvas.parentElement.clientHeight=0;
+ assert.equal(f.r.getViewportSize().width,1000);assert.equal(f.r.getViewportSize().height,700);f.r.destroy();
+});
 test('software WebGL is refused before compiling or drawing',async()=>{
   const f=fixture({software:true});assert.equal(await f.r.init(),false);
   assert.equal(f.counts().compiles,0);assert.equal(f.counts().draws,0);f.r.destroy();
@@ -72,7 +85,7 @@ test('upstream token size uses one size dial without double shrink',async()=>{
 test('large windows obey fragment budget without shrinking CSS effect',async()=>{
  const f=fixture();await f.r.init();f.canvas.parentElement.clientWidth=7680;f.canvas.parentElement.clientHeight=4320;
  f.r.setRenderScale(1);f.r.tokenLevel=1;f.r.lastTokenLevel=1;f.r.prevTokenLevel=1;f.r.renderFrame(10000);
- assert.ok(f.canvas.width*f.canvas.height<=262144);assert.ok(Math.abs(f.r.effectState.radius-Math.sqrt(.5*(7680/4320)/Math.PI)*(.02/.08))<1e-9);f.r.destroy();
+ assert.ok(f.canvas.width*f.canvas.height<=2097152);assert.ok(Math.abs(f.r.effectState.radius-Math.sqrt(.5*(7680/4320)/Math.PI)*(.02/.08))<1e-9);f.r.destroy();
 });
 test('60 FPS deadline never overschedules on high-refresh displays',async()=>{
  for(const hz of [60,120,144]){
@@ -80,6 +93,51 @@ test('60 FPS deadline never overschedules on high-refresh displays',async()=>{
    for(let i=1;i<=hz*2;i++)r.loop(i*1000/hz);
    assert.ok(f.counts().draws>=119&&f.counts().draws<=121,`${hz}Hz: ${f.counts().draws}`);r.destroy();
  }
+});
+test('large default scene reaches full CSS resolution and honors HiDPI',async()=>{
+ for(const dpr of [1,2]){
+   const f=fixture({dpr});await f.r.init();const r=f.r;r.tokenLevel=1;r.lastTokenLevel=1;r.prevTokenLevel=1;
+   r.renderFrame(10000);
+   assert.equal(f.canvas.width,Math.floor(r.viewportRect.width*dpr));
+   assert.equal(f.canvas.height,Math.floor(r.viewportRect.height*dpr));r.destroy();
+ }
+});
+test('adaptive quality reduces actual capped pixels without changing saved scale',async()=>{
+ const f=fixture({dpr:2});await f.r.init();const r=f.r;
+ f.canvas.parentElement.clientWidth=3840;f.canvas.parentElement.clientHeight=2160;
+ r.tokenLevel=1;r.lastTokenLevel=1;r.prevTokenLevel=1;r.startTime=10000;r.prevTime=10000;
+ r.renderFrame(10000);const before=f.canvas.width*f.canvas.height,radius=r.effectState.radius;
+ r.dtAvg=.1;r.renderFrame(14000);
+ assert.ok(f.canvas.width*f.canvas.height<before*.7);assert.equal(r.renderScale,1);
+ assert.equal(r.effectState.radius,radius);r.destroy();
+});
+test('extreme aspect ratio also respects dimension limits',async()=>{
+ const f=fixture({dpr:2});await f.r.init();const r=f.r;
+ r.updateViewportRect({x:0,y:0,width:100000,height:1});
+ assert.ok(f.canvas.width<=4096&&f.canvas.height<=4096&&f.canvas.width*f.canvas.height<=2097152);r.destroy();
+});
+test('resolution caps hold across fractional DPR, 4K, 8K and narrow viewports',async()=>{
+ const f=fixture();await f.r.init();
+ for(const dpr of [1,1.25,2,3])for(const [width,height] of [[1000,700],[3840,2160],[7680,4320],[100000,1],[1,100000]]){
+   f.canvas.ownerDocument.defaultView.devicePixelRatio=dpr;
+   const rect={x:0,y:0,width,height};f.r.qualityFactor=1;f.r.updateViewportRect(rect);
+   const before=f.canvas.width*f.canvas.height;
+   assert.ok(before<=2097152&&f.canvas.width<=4096&&f.canvas.height<=4096);
+   f.r.qualityFactor=.8;f.r.updateViewportRect(rect);
+   assert.ok(f.canvas.width*f.canvas.height<before);
+ }
+ f.r.destroy();
+});
+test('unchanged runtime setting preserves adaptation and minimum quality stops safely',async()=>{
+ const f=fixture();await f.r.init();const r=f.r;r.qualityFactor=.25;r.setRenderScale(1);
+ assert.equal(r.qualityFactor,.25);r.autoQuality=false;r.tokenLevel=.5;r.renderFrame(10000);
+ r.autoQuality=true;r.running=true;r.startTime=10000;r.dtAvg=.1;let fatal=false;r.onFatalError=()=>fatal=true;
+ r.renderFrame(14000);assert.equal(fatal,true);assert.equal(r.running,false);r.destroy();
+});
+test('GPU WAIT_FAILED stops instead of submitting another draw',async()=>{
+ const f=fixture();await f.r.init();const r=f.r;r.running=true;r.gpuFence={};
+ f.gl.WAIT_FAILED=99;f.gl.clientWaitSync=()=>99;let fatal=false;r.onFatalError=()=>fatal=true;
+ r.loop(1000);assert.equal(f.counts().draws,0);assert.equal(r.running,false);assert.equal(fatal,true);r.destroy();
 });
 test('GPU backpressure skips draws while retaining canvas and stops on timeout',async()=>{
  const f=fixture();await f.r.init();const r=f.r;r.running=true;

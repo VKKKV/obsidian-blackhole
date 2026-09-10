@@ -19,6 +19,18 @@ test('migration updates untouched tiny defaults but leaves custom sizes alone',(
  const upgraded=normalizeSettings(legacy);assert.equal(upgraded.holeRadius,.02);assert.equal(upgraded.sizeMode,2);
  const custom=normalizeSettings({...legacy,holeRadius:.012});assert.equal(custom.holeRadius,.012);assert.equal(custom.sizeMode,1);
 });
+test('higher resolution default preserves saved resolution choices',()=>{
+ assert.equal(normalizeSettings({}).renderScale,1);
+ assert.equal(normalizeSettings({...DEFAULT_SETTINGS,defaultsVersion:1,renderScale:.75}).renderScale,.75);
+ assert.equal(normalizeSettings({...DEFAULT_SETTINGS,defaultsVersion:1,renderScale:.5}).renderScale,.5);
+ assert.equal(normalizeSettings({...DEFAULT_SETTINGS,renderScale:.75}).renderScale,.75);
+});
+test('settings copy stays concise in both languages',()=>{
+ const {t}=loadTS('src/i18n.ts');
+ assert.equal(t('zh-CN','settings.reset.desc'),'重置动画参数。');
+ assert.ok(t('en','settings.renderScale.desc').length<60);
+ assert.ok(!t('zh-CN','settings.renderScale.desc').includes('262'));
+});
 test('metrics count mixed CJK and words and cache unchanged editor content',()=>{
  assert.equal(countWords('中文 hello world'),4);
  let reads=0;const cache=new MetricCache({currentText:()=>{reads++;return '中文 hello world'},markdownFileCount:()=>2,markdownTabCount:()=>3});
@@ -27,22 +39,23 @@ test('metrics count mixed CJK and words and cache unchanged editor content',()=>
  cache.invalidate('word-count');cache.level({...DEFAULT_SETTINGS,sizeMode:1},10002);assert.equal(reads,2);
 });
 function fixture({idle=false,hidden=false,pending=false}={}){
- let layout,resolveInit,starts=0,inits=0,destroyed=0;
+ let layout,resolveInit,starts=0,inits=0,destroyed=0,lensDestroyed=0;
+ const lensStates=[];
  const doc={hidden,body:{appendChild(){}},querySelector:()=>null,createElement:()=>({className:'',classList:{toggle(){}},remove(){}})};
  const rendererMock={BlackHoleRenderer:class{
    constructor(){this.softwareRenderer=false}
    init(){inits++;return pending?new Promise(resolve=>resolveInit=resolve):Promise.resolve(true)}
    start(){starts++}stop(){}destroy(){destroyed++}setRenderScale(){}updateTexture(){}
  }};
- const captureMock={WorkspaceCapture:class{setSuspended(){}setElement(){}setOptions(){}requestSoon(){}destroy(){}}};
+ const lensMock={BackdropLens:class{supported=true;setSuspended(v){lensStates.push(v)}setTarget(){}setEnabled(){}refresh(){}update(){}destroy(){lensDestroyed++}}};
  const obsidian={Plugin:class{},Notice:class{},MarkdownView:class{},PluginSettingTab:class{},Setting:class{}};
- const {default:Plugin}=loadTS('src/main.ts',{'obsidian':obsidian,'./renderer':rendererMock,'./capture':captureMock},{
+ const {default:Plugin}=loadTS('src/main.ts',{'obsidian':obsidian,'./renderer':rendererMock,'./backdrop':lensMock},{
    document:doc,window:{clearInterval(){},clearTimeout(){},setTimeout(){return 1},setInterval(){return 1}},
  });
  const p=new Plugin();p.loadData=async()=>({idlePlaybackEnabled:idle});p.saveData=async()=>{};
  p.addSettingTab=()=>{};p.addRibbonIcon=()=>{};p.registerDomEvent=()=>{};p.registerEvent=()=>{};
  p.app={workspace:{on:()=>({}),onLayoutReady:fn=>layout=fn,getActiveViewOfType:()=>null},vault:{on:()=>({})}};
- return {p,doc,layout:()=>layout(),resolve:()=>resolveInit(true),counts:()=>({starts,inits,destroyed})};
+ return {p,doc,layout:()=>layout(),resolve:()=>resolveInit(true),counts:()=>({starts,inits,destroyed,lensDestroyed}),lensStates};
 }
 const flush=async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve()};
 test('live parameter edits enforce the same area relation as reload',()=>{
@@ -74,4 +87,16 @@ test('hidden document blocks initial GPU startup',async()=>{
 test('ready visible plugin starts through exactly one gate',async()=>{
  const f=fixture();await f.p.onload();f.layout();await flush();assert.equal(f.counts().starts,1);
  f.p.applyRuntimeSettings();assert.equal(f.counts().starts,1);f.p.onunload();
+});
+test('compilation, hidden document and unload suspend/destroy the live lens',async()=>{
+ const f=fixture();await f.p.onload();f.layout();await flush();
+ f.p.compiling=true;f.p.applyRuntimeSettings();assert.equal(f.lensStates.at(-1),true);
+ f.p.compiling=false;f.p.applyRuntimeSettings();assert.equal(f.lensStates.at(-1),false);
+ f.doc.hidden=true;f.p.visibilityHandler();assert.equal(f.lensStates.at(-1),true);
+ f.p.onunload();assert.equal(f.counts().lensDestroyed,1);
+});
+test('legacy text-lens preference never enables WebGL screenshot sampling',async()=>{
+ const f=fixture();await f.p.onload();f.layout();await flush();
+ f.p.settings.captureEnabled=true;f.p.applyRuntimeSettings();
+ assert.equal(f.p.renderer.captureEnabled,false);assert.equal(f.p.capture,undefined);f.p.onunload();
 });
