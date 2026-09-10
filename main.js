@@ -1,12 +1,7 @@
-var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __commonJS = (cb, mod) => function __require() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -19,875 +14,7 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// node_modules/dom-to-image-more/dist/dom-to-image-more.min.js
-var require_dom_to_image_more_min = __commonJS({
-  "node_modules/dom-to-image-more/dist/dom-to-image-more.min.js"(exports, module2) {
-    ((d) => {
-      let p = /* @__PURE__ */ (() => {
-        let e2 = 0;
-        return { escape: function(e3) {
-          return e3.replace(/([.*+?^${}()|[\]/\\])/g, "\\$1");
-        }, isDataUrl: function(e3) {
-          return -1 !== e3.search(/^(data:)/);
-        }, canvasToBlob: function(t4) {
-          if (t4.toBlob)
-            return new Promise(function(e3) {
-              t4.toBlob(e3);
-            });
-          return ((o3) => new Promise(function(e3) {
-            var t5 = b(o3.toDataURL().split(",")[1]), n3 = t5.length, r3 = new Uint8Array(n3);
-            for (let e4 = 0; e4 < n3; e4++)
-              r3[e4] = t5.charCodeAt(e4);
-            e3(new Blob([r3], { type: "image/png" }));
-          }))(t4);
-        }, resolveUrl: function(e3, t4) {
-          var n3 = document.implementation.createHTMLDocument(), r3 = n3.createElement("base"), o3 = (n3.head.appendChild(r3), n3.createElement("a"));
-          return Object.assign(o3.style, h), n3.body.appendChild(o3), r3.href = t4, o3.href = e3, o3.href;
-        }, getAndEncode: function(e3, t4) {
-          return c2(e3, t4, true).then(s2);
-        }, getResourceText: function(e3, t4, n3) {
-          return c2(e3, t4, n3).then(u2);
-        }, uid: function() {
-          return "u" + ("0000" + (Math.random() * Math.pow(36, 4) << 0).toString(36)).slice(-4) + e2++;
-        }, asArray: function(e3) {
-          return Array.from(e3);
-        }, escapeXhtml: function(e3) {
-          return e3.replace(/%/g, "%25").replace(/#/g, "%23").replace(/\n/g, "%0A");
-        }, makeImage: function(i3) {
-          return "data:," !== i3 ? new Promise(function(t4, n3) {
-            let r3 = document.createElementNS("http://www.w3.org/2000/svg", "svg"), o3 = new Image();
-            v.impl.options.useCredentials && (o3.crossOrigin = "use-credentials"), o3.onload = function() {
-              function e3() {
-                window && window.requestAnimationFrame ? window.requestAnimationFrame(function() {
-                  t4(o3);
-                }) : t4(o3);
-              }
-              r3.remove(), "function" == typeof o3.decode ? o3.decode().then(e3, e3) : e3();
-            }, o3.onerror = (e3) => {
-              r3.remove();
-              var t5 = String(i3).split(",", 1)[0], t5 = new Error("dom-to-image-more: failed to rasterize the generated image (" + t5 + ", " + String(i3).length + " bytes). The source may contain malformed markup, an unsupported element, or a tainted/cross-origin resource.");
-              t5.cause = e3, n3(t5);
-            }, r3.appendChild(o3), Object.assign(r3.style, h), o3.src = i3, document.body.appendChild(r3);
-          }) : Promise.resolve();
-        }, width: function(e3) {
-          var t4 = m2(e3, "width");
-          if (!isNaN(t4))
-            return t4;
-          t4 = f2(e3);
-          if (t4)
-            return t4.width;
-          var t4 = m2(e3, "border-left-width"), n3 = m2(e3, "border-right-width");
-          return e3.scrollWidth + t4 + n3;
-        }, height: function(e3) {
-          var t4 = m2(e3, "height");
-          if (!isNaN(t4))
-            return t4;
-          t4 = f2(e3);
-          if (t4)
-            return t4.height;
-          var t4 = m2(e3, "border-top-width"), n3 = m2(e3, "border-bottom-width");
-          return e3.scrollHeight + t4 + n3;
-        }, getWindow: r2, isElement: l2, isElementHostForOpenShadowRoot: function(e3) {
-          return l2(e3) && null !== e3.shadowRoot;
-        }, isShadowRoot: n2, isInShadowRoot: i2, isHTMLElement: function(e3) {
-          return t3(e3, "HTMLElement");
-        }, isHTMLCanvasElement: function(e3) {
-          return t3(e3, "HTMLCanvasElement");
-        }, isHTMLInputElement: function(e3) {
-          return t3(e3, "HTMLInputElement");
-        }, isHTMLImageElement: function(e3) {
-          return t3(e3, "HTMLImageElement");
-        }, isHTMLLinkElement: function(e3) {
-          return t3(e3, "HTMLLinkElement");
-        }, isHTMLScriptElement: function(e3) {
-          return t3(e3, "HTMLScriptElement");
-        }, isHTMLStyleElement: function(e3) {
-          return t3(e3, "HTMLStyleElement");
-        }, isHTMLTextAreaElement: function(e3) {
-          return t3(e3, "HTMLTextAreaElement");
-        }, isShadowSlotElement: function(e3) {
-          return i2(e3) && t3(e3, "HTMLSlotElement");
-        }, isSVGElement: function(e3) {
-          return t3(e3, "SVGElement");
-        }, isSVGImageElement: function(e3) {
-          return t3(e3, "SVGImageElement");
-        }, isSVGSVGElement: function(e3) {
-          return t3(e3, "SVGSVGElement");
-        }, isSVGRectElement: function(e3) {
-          return t3(e3, "SVGRectElement");
-        }, isSVGUseElement: function(e3) {
-          return t3(e3, "SVGUseElement");
-        }, isDimensionMissing: function(e3) {
-          return isNaN(e3) || e3 <= 0;
-        }, isInstanceOf: t3 };
-        function r2(e3) {
-          e3 = e3 ? e3.ownerDocument : void 0;
-          return (e3 ? e3.defaultView : void 0) || ("undefined" != typeof window ? window : void 0) || (void 0 !== d ? d : void 0) || globalThis;
-        }
-        function t3(e3, t4) {
-          var n3 = r2(e3);
-          return o2(e3, n3, t4) || o2(e3, n3 && n3.parent, t4);
-        }
-        function o2(e3, t4, n3) {
-          try {
-            var r3 = t4 && t4[n3];
-            return "function" == typeof r3 && e3 instanceof r3;
-          } catch (e4) {
-            return false;
-          }
-        }
-        function n2(e3) {
-          return t3(e3, "ShadowRoot");
-        }
-        function i2(e3) {
-          return null != e3 && void 0 !== e3.getRootNode && n2(e3.getRootNode());
-        }
-        function l2(e3) {
-          return t3(e3, "Element");
-        }
-        function s2(e3) {
-          return null == e3 || "" === e3 ? "" : "string" == typeof e3 ? e3 : a2(e3, "readAsDataURL", "");
-        }
-        function u2(e3) {
-          if (null == e3 || "" === e3)
-            return null;
-          if ("string" != typeof e3)
-            return a2(e3, "readAsText", null);
-          {
-            var r3 = (e3 = e3).indexOf(",");
-            if (-1 === r3)
-              return "";
-            var o3 = e3.slice(0, r3), e3 = e3.slice(r3 + 1);
-            if (!/;base64/i.test(o3))
-              return decodeURIComponent(e3);
-            let t4 = b(e3), n3 = "";
-            for (let e4 = 0; e4 < t4.length; e4 += 1)
-              n3 += "%" + ("00" + t4.charCodeAt(e4).toString(16)).slice(-2);
-            return decodeURIComponent(n3);
-          }
-        }
-        function a2(n3, r3, o3) {
-          return new Promise(function(t4) {
-            let e3 = new FileReader();
-            e3.onloadend = function() {
-              t4(e3.result);
-            }, e3.onerror = function() {
-              t4(o3);
-            };
-            try {
-              e3[r3](n3);
-            } catch (e4) {
-              t4(o3);
-            }
-          });
-        }
-        function c2(a3, c3, e3) {
-          let t4 = v.impl.urlCache.find(function(e4) {
-            return e4.url === a3;
-          });
-          if (t4 || (t4 = { url: a3, promise: null }, v.impl.urlCache.push(t4)), null === t4.promise) {
-            let s3 = function(e4) {
-              var t5 = v.impl.options.requestInterceptor;
-              if ("function" == typeof t5)
-                try {
-                  return t5(a3, { type: c3, status: e4 });
-                } catch (e5) {
-                  S("requestInterceptor threw:", e5);
-                }
-            }, u3 = function(e4) {
-              return null != e4;
-            };
-            var n3 = s3(void 0);
-            if (u3(n3))
-              return t4.promise = Promise.resolve(n3), t4.promise;
-            if (false === e3)
-              return t4.promise = Promise.resolve(null), t4.promise;
-            v.impl.options.cacheBust && (a3 += (/\?/.test(a3) ? "&" : "?") + (/* @__PURE__ */ new Date()).getTime()), t4.promise = new Promise(function(n4) {
-              let o3 = new XMLHttpRequest();
-              function i3(e5) {
-                l3(e5, false), n4(null);
-              }
-              function t5() {
-                r3("Status:" + o3.status + " while fetching resource: " + a3);
-              }
-              function r3(t6) {
-                var e5 = s3(o3.status);
-                u3(e5) ? Promise.resolve(e5).then(function(e6) {
-                  l3(t6, true), n4(e6);
-                }, function() {
-                  S(t6), i3(t6);
-                }) : (e5 = c3 === y.IMAGE || c3 === y.CSS_IMAGE ? v.impl.options.imagePlaceholder : void 0) ? (l3(t6, true), n4(e5)) : (S(t6), i3(t6));
-              }
-              function l3(e5, t6) {
-                var n5 = v.impl.options.onImageError;
-                if ("function" == typeof n5)
-                  try {
-                    n5({ url: a3, message: e5, status: o3.status, willUsePlaceholder: t6 });
-                  } catch (e6) {
-                    S("onImageError handler threw:", e6);
-                  }
-              }
-              if (o3.timeout = v.impl.options.httpTimeout, o3.onerror = t5, o3.ontimeout = t5, o3.onloadend = function() {
-                var e5;
-                o3.readyState === XMLHttpRequest.DONE && (0 === (e5 = o3.status) && a3.toLowerCase().startsWith("file://") || 200 <= e5 && e5 <= 300 && null !== o3.response ? (e5 = o3.response) instanceof Blob ? n4(e5) : r3("Response was not a Blob (got " + typeof e5 + ") while fetching resource: " + a3) : t5());
-              }, 0 < v.impl.options.useCredentialsFilters.length && (v.impl.options.useCredentials = 0 < v.impl.options.useCredentialsFilters.filter((e5) => 0 <= a3.search(e5)).length), v.impl.options.useCredentials && (o3.withCredentials = true), v.impl.options.corsImg && 0 === a3.indexOf("http") && -1 === a3.indexOf(window.location.origin)) {
-                var e4 = "POST" === (v.impl.options.corsImg.method || "GET").toUpperCase() ? "POST" : "GET";
-                o3.open(e4, (v.impl.options.corsImg.url || "").replace("#{cors}", a3), true);
-                let t6 = false, n5 = v.impl.options.corsImg.headers || {}, r4 = (Object.keys(n5).forEach(function(e5) {
-                  -1 !== n5[e5].indexOf("application/json") && (t6 = true), o3.setRequestHeader(e5, n5[e5]);
-                }), ((e5) => {
-                  try {
-                    return JSON.parse(JSON.stringify(e5));
-                  } catch (e6) {
-                    S("corsImg.data is missing or invalid", e6), i3("corsImg.data is missing or invalid");
-                  }
-                })(v.impl.options.corsImg.data || ""));
-                Object.keys(r4).forEach(function(e5) {
-                  "string" == typeof r4[e5] && (r4[e5] = r4[e5].replace("#{cors}", a3));
-                }), o3.responseType = "blob", o3.send(t6 ? JSON.stringify(r4) : r4);
-              } else
-                o3.open("GET", a3, true), o3.responseType = "blob", o3.send();
-            });
-          }
-          return t4.promise;
-        }
-        function f2(e3) {
-          if (e3.nodeType !== w || "function" != typeof e3.getBBox)
-            return null;
-          try {
-            var t4 = e3.getBBox();
-            return t4 && (t4.width || t4.height) ? t4 : null;
-          } catch (e4) {
-            return null;
-          }
-        }
-        function m2(t4, n3) {
-          if (t4.nodeType === w) {
-            let e3 = E(t4).getPropertyValue(n3);
-            if ("px" === e3.slice(-2))
-              return e3 = e3.slice(0, -2), parseFloat(e3);
-          }
-          return NaN;
-        }
-      })(), g = /* @__PURE__ */ (() => {
-        let r2 = /url\(\s*(["']?)((?:\\.|[^\\)])+)\1\s*\)/gm;
-        return { inlineAll: function(t3, r3, o2, i2) {
-          if (!e2(t3))
-            return Promise.resolve(t3);
-          return Promise.resolve(t3).then(n2).then(function(e3) {
-            return v.impl.options.filterUrls ? e3.filter(function(e4) {
-              return v.impl.options.filterUrls(e4, r3);
-            }) : e3;
-          }).then(function(e3) {
-            let n3 = Promise.resolve(t3);
-            return e3.forEach(function(t4) {
-              n3 = n3.then(function(e4) {
-                return s2(e4, t4, r3, o2, i2);
-              });
-            }), n3;
-          });
-        }, shouldProcess: e2, impl: { readUrls: n2, inline: s2, urlAsRegex: l2 } };
-        function e2(e3) {
-          return -1 !== e3.search(r2);
-        }
-        function n2(e3) {
-          for (var t3, n3 = []; null !== (t3 = r2.exec(e3)); )
-            n3.push(t3[2]);
-          return n3.filter(function(e4) {
-            return !p.isDataUrl(e4);
-          });
-        }
-        function l2(e3) {
-          return new RegExp(`url\\((["']?)(${p.escape(e3)})\\1\\)`, "gm");
-        }
-        function s2(n3, r3, t3, o2, i2) {
-          return Promise.resolve(r3).then(function(e3) {
-            return t3 ? p.resolveUrl(e3, t3) : e3;
-          }).then(function(e3) {
-            return (i2 || p.getAndEncode)(e3, o2);
-          }).then(function(e3) {
-            var t4 = l2(r3);
-            return n3.replace(t4, `url($1${e3}$1)`);
-          });
-        }
-      })(), e = { resolveAll: function() {
-        return t2().then(function(e2) {
-          return Promise.all(e2.map(function(e3) {
-            return e3.resolve();
-          }));
-        }).then(function(e2) {
-          return e2.join("\n");
-        });
-      }, impl: { readAll: t2 } };
-      function t2() {
-        return Promise.resolve(p.asArray(document.styleSheets)).then(function(e2) {
-          let r2 = "function" == typeof v.impl.options.requestInterceptor, o2 = {};
-          return Promise.all(e2.map(function(t4) {
-            let n2 = t4.href;
-            if (!n2 || o2[n2])
-              return t4;
-            o2[n2] = true;
-            var e3 = ((e4) => {
-              try {
-                return !e4.cssRules;
-              } catch (e5) {
-                return true;
-              }
-            })(t4) && ((e4) => {
-              var t5 = v.impl.options.loadExternalStyleSheet;
-              if ("function" == typeof t5)
-                try {
-                  return true === t5(e4);
-                } catch (e5) {
-                  return S("domtoimage: loadExternalStyleSheet predicate threw:", e5), false;
-                }
-              return true === t5;
-            })(n2);
-            return r2 || e3 ? p.getResourceText(n2, y.STYLESHEET, e3).then(function(e4) {
-              return e4 && ((e5, t5) => {
-                try {
-                  var n3 = document.implementation.createHTMLDocument(""), r3 = n3.createElement("style");
-                  return r3.appendChild(document.createTextNode(((e6, r4) => e6.replace(/url\((['"]?)([^'")]+)\1\)/g, function(e7, t6, n4) {
-                    n4 = n4.trim();
-                    return p.isDataUrl(n4) || /^[a-z][a-z0-9+.-]*:/i.test(n4) ? e7 : `url(${t6}${p.resolveUrl(n4, r4)}${t6})`;
-                  }))(e5, t5))), n3.body.appendChild(r3), r3.sheet;
-                } catch (e6) {
-                  return null;
-                }
-              })(e4, n2) || t4;
-            }) : t4;
-          }));
-        }).then(function(e2) {
-          let n2 = [];
-          return e2.forEach(function(t4) {
-            var e3 = Object.getPrototypeOf(t4);
-            if (Object.prototype.hasOwnProperty.call(e3, "cssRules"))
-              try {
-                p.asArray(t4.cssRules || []).forEach(n2.push.bind(n2));
-              } catch (e4) {
-                v.impl.options.ignoreCSSRuleErrors || S("domtoimage: Error while reading CSS rules from: " + t4.href, e4);
-              }
-          }), n2;
-        }).then(function(e2) {
-          return e2.filter(function(e3) {
-            return e3.type === CSSRule.FONT_FACE_RULE;
-          }).filter(function(e3) {
-            return g.shouldProcess(e3.style.getPropertyValue("src"));
-          });
-        }).then(function(e2) {
-          return e2.map(t3);
-        });
-        function t3(t4) {
-          return { resolve: function() {
-            var e2 = (t4.parentStyleSheet || {}).href;
-            return g.inlineAll(t4.cssText, e2, y.FONT);
-          }, src: function() {
-            return t4.style.getPropertyValue("src");
-          } };
-        }
-      }
-      let n = { inlineAll: function t3(e2) {
-        if (!p.isElement(e2))
-          return Promise.resolve(e2);
-        return n2(e2).then(function() {
-          return p.isHTMLImageElement(e2) ? r(e2).inline() : p.isSVGImageElement(e2) ? o(e2) : Promise.all(p.asArray(e2.childNodes).map(function(e3) {
-            return t3(e3);
-          }));
-        });
-        function n2(r2) {
-          if (!r2.style)
-            return Promise.resolve(r2);
-          let e3 = ["background", "background-image", "mask", "mask-image", "-webkit-mask", "-webkit-mask-image"], t4 = e3.map(function(t5) {
-            let e4 = r2.style.getPropertyValue(t5), n3 = r2.style.getPropertyPriority(t5);
-            return e4 ? g.inlineAll(e4, void 0, y.CSS_IMAGE).then(function(e5) {
-              r2.style.setProperty(t5, e5, n3);
-            }) : Promise.resolve();
-          });
-          return Promise.all(t4).then(function() {
-            return r2;
-          });
-        }
-      }, impl: { newImage: r } };
-      function r(n2) {
-        return { inline: function(t3) {
-          if (p.isDataUrl(n2.src))
-            return Promise.resolve();
-          return Promise.resolve(n2.src).then(function(e2) {
-            return (t3 || p.getAndEncode)(e2, y.IMAGE);
-          }).then(function(t4) {
-            return new Promise(function(e2) {
-              n2.onload = e2, n2.onerror = e2, n2.src = t4;
-            });
-          });
-        } };
-      }
-      function o(t3, n2) {
-        let r2 = "http://www.w3.org/1999/xlink";
-        var e2 = t3.getAttribute("href") || t3.getAttributeNS(r2, "href") || t3.getAttribute("xlink:href");
-        return !e2 || p.isDataUrl(e2) ? Promise.resolve(t3) : Promise.resolve(e2).then(function(e3) {
-          return (n2 || p.getAndEncode)(e3, y.IMAGE);
-        }).then(function(e3) {
-          return e3 && (t3.setAttributeNS(r2, "xlink:href", e3), t3.setAttribute("href", e3)), t3;
-        });
-      }
-      let h = { position: "fixed", left: "-9999px", visibility: "hidden" }, i = { warn: function(...e2) {
-        console.warn(...e2);
-      }, error: function(...e2) {
-        console.error(...e2);
-      } }, l = { copyDefaultStyles: true, imagePlaceholder: void 0, cacheBust: false, useCredentials: false, useCredentialsFilters: [], httpTimeout: 3e4, styleCaching: "strict", corsImg: void 0, adjustClonedNode: void 0, filterStyles: void 0, filterUrls: void 0, adjustPseudoElement: void 0, onImageError: void 0, ensureShown: false, pixelRatio: 1, preserveScroll: false, ignoreCSSRuleErrors: false, requestInterceptor: void 0, loadExternalStyleSheet: false, logger: i }, y = Object.freeze({ IMAGE: "image", CSS_IMAGE: "css-image", FONT: "font", STYLESHEET: "stylesheet" }), v = { toSvg: a, toPng: function(e2, t3) {
-        return c(e2, t3).then(function(e3) {
-          return e3.toDataURL();
-        });
-      }, toJpeg: function(e2, t3) {
-        return c(e2, t3).then(function(e3) {
-          return e3.toDataURL("image/jpeg", (t3 ? t3.quality : void 0) || 1);
-        });
-      }, toBlob: function(e2, t3) {
-        return c(e2, t3).then(p.canvasToBlob);
-      }, toPixelData: function(t3, e2) {
-        return c(t3, e2).then(function(e3) {
-          return e3.getContext("2d").getImageData(0, 0, p.width(t3), p.height(t3)).data;
-        });
-      }, toCanvas: c, ResourceType: y, impl: { fontFaces: e, images: n, util: p, inliner: g, urlCache: [], options: {}, copyOptions: function(t3) {
-        Object.keys(l).forEach(function(e2) {
-          v.impl.options[e2] = (void 0 === t3[e2] ? l : t3)[e2];
-        });
-      }, resetUrlCache: f } };
-      function f() {
-        v.impl.urlCache = [];
-      }
-      "object" == typeof exports && "object" == typeof module2 ? module2.exports = v : d.domtoimage = v;
-      let w = ("undefined" != typeof Node ? Node.ELEMENT_NODE : void 0) || 1, E = s("getComputedStyle"), b = s("atob");
-      function s(e2) {
-        return (void 0 !== d ? d[e2] : void 0) || ("undefined" != typeof window ? window[e2] : void 0) || globalThis[e2];
-      }
-      function m(...e2) {
-        u("warn", e2);
-      }
-      function S(...e2) {
-        u("error", e2);
-      }
-      function u(e2, t3) {
-        var n2 = v.impl.options.logger || i, e2 = n2[e2];
-        "function" == typeof e2 && e2.apply(n2, t3);
-      }
-      function a(s2, u2) {
-        let i2 = v.impl.util.getWindow(s2), o2 = (u2 = u2 || {}, v.impl.copyOptions(u2), []);
-        return T = [], i2 && i2.document ? (() => {
-          var e2 = i2.document;
-          if (!e2.fonts || !e2.fonts.ready)
-            return Promise.resolve();
-          let t3 = v.impl.options.httpTimeout || 3e4, n2, r2 = Promise.resolve(e2.fonts.ready).then(function() {
-            return false;
-          }, function() {
-            return false;
-          }), o3 = new Promise(function(e3) {
-            n2 = i2.setTimeout(function() {
-              e3(true);
-            }, t3);
-          });
-          return Promise.race([r2, o3]).then(function(e3) {
-            i2.clearTimeout(n2), e3 && m("dom-to-image-more: timed out after " + t3 + "ms waiting for document fonts to finish loading (document.fonts.ready); rendering anyway \u2014 the output may have missing glyphs or fallback-font metrics.");
-          });
-        })().then(function() {
-          var e2 = s2;
-          if (e2.nodeType === w)
-            return e2;
-          var t3, n2 = e2, r2 = e2.parentNode;
-          if (r2)
-            return t3 = document.createElement("span"), r2.replaceChild(t3, n2), t3.append(e2), o2.push({ parent: r2, child: n2, wrapper: t3 }), t3;
-          throw new Error("Cannot render a non-element node that is not attached to a parent; wrap it in an element or attach it to the document first.");
-        }).then(function(e2) {
-          return function l2(t3, d2, h2, s3) {
-            let e3 = d2.filter;
-            if (t3 === P || p.isHTMLScriptElement(t3) || p.isHTMLStyleElement(t3) || p.isHTMLLinkElement(t3) || null !== h2 && e3 && !e3(t3))
-              return Promise.resolve();
-            return Promise.resolve(t3).then(n2).then(r2).then(function(e4) {
-              return u3(e4, i3(t3));
-            }).then(o3).then(function(e4) {
-              return a3(e4, t3);
-            });
-            function n2(e4) {
-              return p.isHTMLCanvasElement(e4) ? p.makeImage(e4.toDataURL()) : e4.cloneNode(false);
-            }
-            function r2(e4) {
-              return d2.adjustClonedNode && d2.adjustClonedNode(t3, e4, false), Promise.resolve(e4);
-            }
-            function o3(e4) {
-              return d2.adjustClonedNode && d2.adjustClonedNode(t3, e4, true), Promise.resolve(e4);
-            }
-            function i3(e4) {
-              return p.isElementHostForOpenShadowRoot(e4) ? e4.shadowRoot : e4;
-            }
-            function u3(n3, e4) {
-              let r3 = t4(e4), o4 = Promise.resolve();
-              if (0 !== r3.length) {
-                let t5 = E(i4(e4));
-                p.asArray(r3).forEach(function(e5) {
-                  o4 = o4.then(function() {
-                    return l2(e5, d2, t5, s3).then(function(e6) {
-                      e6 && n3.appendChild(e6);
-                    });
-                  });
-                });
-              }
-              return o4.then(function() {
-                return n3;
-              });
-              function i4(e5) {
-                return p.isShadowRoot(e5) ? e5.host : e5;
-              }
-              function t4(t5) {
-                if (p.isShadowSlotElement(t5)) {
-                  let e5 = t5.assignedNodes();
-                  if (e5 && 0 < e5.length)
-                    return e5;
-                }
-                return t5.childNodes;
-              }
-            }
-            function a3(a4, c3) {
-              return !p.isElement(a4) || p.isShadowSlotElement(c3) ? Promise.resolve(a4) : Promise.resolve().then(n3).then(o4).then(i4).then(l3).then(t4).then(e4).then(s4).then(u4).then(r3).then(function() {
-                return a4;
-              });
-              function e4() {
-                if (d2.preserveScroll && a4.style) {
-                  let e5 = c3.scrollLeft || 0, t5 = c3.scrollTop || 0;
-                  if (0 !== e5 || 0 !== t5) {
-                    a4.style.overflow = "hidden";
-                    let n4 = `translate(${-e5}px, ${-t5}px)`;
-                    p.asArray(a4.children).forEach(function(t6) {
-                      if (t6.style) {
-                        let e6 = t6.style.transform && "none" !== t6.style.transform ? " " + t6.style.transform : "";
-                        t6.style.transform = n4 + e6;
-                      }
-                    });
-                  }
-                }
-              }
-              function t4() {
-                if (a4.attributes && a4.removeAttribute) {
-                  let n4 = [];
-                  for (let t5 = 0; t5 < a4.attributes.length; t5 += 1) {
-                    let e5 = a4.attributes[t5].name;
-                    /["'=<>/\s]/.test(e5) && n4.push(e5);
-                  }
-                  n4.forEach(function(e5) {
-                    a4.removeAttribute(e5);
-                  });
-                }
-              }
-              function n3() {
-                if (p.isHTMLImageElement(c3) && "function" == typeof c3.decode && !(c3.complete && 0 < c3.naturalWidth))
-                  return c3.decode().catch(function() {
-                  });
-              }
-              function r3() {
-                p.isHTMLImageElement(a4) && (a4.removeAttribute("loading"), c3.srcset || c3.sizes) && (a4.removeAttribute("srcset"), a4.removeAttribute("sizes"), a4.src = c3.currentSrc || c3.src);
-              }
-              function o4() {
-                function e5() {
-                  let t6 = E(c3).getPropertyValue("visibility");
-                  if (null === h2)
-                    "visible" !== t6 && a4.style.setProperty("visibility", "visible");
-                  else {
-                    let e6 = h2.getPropertyValue("visibility");
-                    t6 === e6 && a4.style.removeProperty("visibility");
-                  }
-                }
-                function r4(e6, t6) {
-                  t6.font = e6.font, t6.fontFamily = e6.fontFamily, t6.fontFeatureSettings = e6.fontFeatureSettings, t6.fontKerning = e6.fontKerning, t6.fontSize = e6.fontSize, t6.fontStretch = e6.fontStretch, t6.fontStyle = e6.fontStyle, t6.fontVariant = e6.fontVariant, t6.fontVariantCaps = e6.fontVariantCaps, t6.fontVariantEastAsian = e6.fontVariantEastAsian, t6.fontVariantLigatures = e6.fontVariantLigatures, t6.fontVariantNumeric = e6.fontVariantNumeric, t6.fontVariationSettings = e6.fontVariationSettings, t6.fontWeight = e6.fontWeight;
-                }
-                function t5(e6, t6) {
-                  let n4 = E(e6);
-                  n4.cssText ? (t6.style.cssText = n4.cssText, r4(n4, t6.style)) : (I(d2, e6, n4, h2, t6), null === h2 && (["inset-block", "inset-block-start", "inset-block-end"].forEach((e7) => t6.style.removeProperty(e7)), ["left", "right", "top", "bottom"].forEach((e7) => {
-                    t6.style.getPropertyValue(e7) && t6.style.setProperty(e7, "0px");
-                  })));
-                }
-                a4.style && (t5(c3, a4), e5());
-              }
-              function i4() {
-                let u5 = p.uid();
-                return Promise.all([":before", ":after"].map(e5));
-                function e5(o5) {
-                  let i5 = E(c3, o5), l4 = i5.getPropertyValue("content");
-                  if ("" !== l4 && "none" !== l4) {
-                    let s6 = function() {
-                      let e7 = p.asArray(i5).map(t6).join("; ");
-                      return e7 + ";";
-                      function t6(e8) {
-                        let t7 = i5.getPropertyValue(e8), n5 = i5.getPropertyPriority(e8) ? " !important" : "";
-                        return e8 + ": " + t7 + n5;
-                      }
-                    };
-                    var s5 = s6;
-                    let t5;
-                    if (d2.adjustPseudoElement) {
-                      let e7 = d2.adjustPseudoElement(c3, o5, i5);
-                      if (false === e7)
-                        return;
-                      e7 && "object" == typeof e7 && (t5 = e7);
-                    }
-                    let e6 = a4.getAttribute("class") || "", n4 = (a4.setAttribute("class", e6 + " " + u5), `.${u5}:` + o5), r4 = i5.cssText ? `${i5.cssText} content: ${l4};` : s6();
-                    return t5 && (r4 += Object.keys(t5).map(function(e7) {
-                      return ` ${e7}: ${t5[e7]};`;
-                    }).join("")), g.inlineAll(r4, void 0, y.CSS_IMAGE).then(function(e7) {
-                      let t6 = document.createElement("style");
-                      t6.appendChild(document.createTextNode(n4 + `{${e7}}`)), a4.appendChild(t6);
-                    });
-                  }
-                }
-              }
-              function l3() {
-                p.isHTMLTextAreaElement(c3) && (a4.innerHTML = c3.value), p.isHTMLInputElement(c3) && a4.setAttribute("value", c3.value);
-              }
-              function s4() {
-                p.isSVGElement(a4) && (a4.setAttribute("xmlns", "http://www.w3.org/2000/svg"), p.isSVGRectElement(a4) && ["width", "height"].forEach(function(e5) {
-                  let t5 = a4.getAttribute(e5);
-                  t5 && a4.style.setProperty(e5, t5);
-                }), p.isSVGUseElement(a4)) && m2(c3);
-              }
-              function u4() {
-                if (p.isElement(a4) && f2()) {
-                  let e5 = E(c3).getPropertyValue("display");
-                  "table" !== e5 && "inline-table" !== e5 || (a4.style.removeProperty("height"), a4.style.removeProperty("block-size"));
-                }
-              }
-              function f2() {
-                let t5 = c3.children || [];
-                for (let e5 = 0; e5 < t5.length; e5 += 1)
-                  if ("CAPTION" === t5[e5].tagName)
-                    return true;
-                return false;
-              }
-              function m2(e5) {
-                let t5 = e5.getAttribute("href") || e5.getAttributeNS("http://www.w3.org/1999/xlink", "href") || e5.getAttribute("xlink:href");
-                if (t5 && "#" === t5.charAt(0)) {
-                  let n4 = t5.slice(1);
-                  if (!T.some((e6) => e6.id === n4)) {
-                    let t6 = e5.ownerDocument.getElementById(n4);
-                    if (t6) {
-                      let e6 = t6.cloneNode(true);
-                      e6.setAttribute("xmlns", "http://www.w3.org/2000/svg"), T.push({ id: n4, node: e6 });
-                    }
-                  }
-                }
-              }
-            }
-          }(e2, u2, null, i2);
-        }).then(function(e2) {
-          if (0 !== T.length) {
-            var o3 = "http://www.w3.org/2000/svg", i3 = document.createElementNS(o3, "svg");
-            i3.setAttribute("xmlns", o3), i3.setAttribute("width", "0"), i3.setAttribute("height", "0"), i3.style.setProperty("position", "absolute"), i3.style.setProperty("width", "0"), i3.style.setProperty("height", "0"), i3.style.setProperty("overflow", "hidden");
-            let t3 = document.createElementNS(o3, "defs"), n2 = (i3.appendChild(t3), /* @__PURE__ */ new Set()), r2 = (e2.getAttribute("id") && n2.add(e2.getAttribute("id")), e2.querySelectorAll("[id]").forEach(function(e3) {
-              n2.add(e3.getAttribute("id"));
-            }), 0);
-            T.forEach(function(e3) {
-              n2.has(e3.id) || (t3.appendChild(e3.node), r2 += 1);
-            }), 0 < r2 && e2.insertBefore(i3, e2.firstChild);
-          }
-          return e2;
-        }).then(u2.disableEmbedFonts ? Promise.resolve(s2) : A).then(u2.disableInlineImages ? Promise.resolve(s2) : C).then(function(e2) {
-          e2.style && (e2.style.margin = "0");
-          u2.bgcolor && (e2.style.backgroundColor = u2.bgcolor);
-          u2.width && (e2.style.width = u2.width + "px");
-          u2.height && (e2.style.height = u2.height + "px");
-          u2.style && Object.assign(e2.style, u2.style);
-          let t3 = null;
-          "function" == typeof u2.onclone && (t3 = u2.onclone(e2));
-          return Promise.resolve(t3).then(function() {
-            return e2;
-          });
-        }).then(function(e2) {
-          if (p.isSVGElement(s2) && !p.isSVGSVGElement(s2))
-            return ((e3) => {
-              let r3 = "http://www.w3.org/2000/svg", t4 = c2(e3), o3;
-              try {
-                o3 = s2.getBBox();
-              } catch (e4) {
-                o3 = { x: 0, y: 0, width: 0, height: 0 };
-              } finally {
-                t4();
-              }
-              e3.removeAttribute("transform"), e3.style.removeProperty("transform");
-              let i3 = u2.width || o3.width, l2 = u2.height || o3.height;
-              return Promise.resolve(e3).then(function(e4) {
-                return e4.setAttribute("xmlns", r3), new XMLSerializer().serializeToString(e4);
-              }).then(a2).then(p.escapeXhtml).then(function(e4) {
-                var t5 = (p.isDimensionMissing(i3) ? "" : ` width="${i3}"`) + (p.isDimensionMissing(l2) ? "" : ` height="${l2}"`), n3 = `${o3.x} ${o3.y} ${o3.width} ` + o3.height;
-                return `<svg xmlns="${r3}"${t5} viewBox="${n3}">${e4}</svg>`;
-              }).then(function(e4) {
-                return "data:image/svg+xml;charset=utf-8," + e4;
-              });
-            })(e2);
-          let t3 = c2(e2), n2, r2;
-          try {
-            n2 = u2.width || p.width(s2), r2 = u2.height || p.height(s2);
-          } finally {
-            t3();
-          }
-          return Promise.resolve(e2).then(function(e3) {
-            return e3.setAttribute("xmlns", "http://www.w3.org/1999/xhtml"), new XMLSerializer().serializeToString(e3);
-          }).then(a2).then(p.escapeXhtml).then(function(e3) {
-            var t4 = (p.isDimensionMissing(n2) ? ' width="100%"' : ` width="${n2}"`) + (p.isDimensionMissing(r2) ? ' height="100%"' : ` height="${r2}"`);
-            return `<svg xmlns="http://www.w3.org/2000/svg"${(p.isDimensionMissing(n2) ? "" : ` width="${n2}"`) + (p.isDimensionMissing(r2) ? "" : ` height="${r2}"`)}><foreignObject${t4}>${e3}</foreignObject></svg>`;
-          }).then(function(e3) {
-            return "data:image/svg+xml;charset=utf-8," + e3;
-          });
-        }).finally(function() {
-          (() => {
-            for (; 0 < o2.length; ) {
-              var e2 = o2.pop();
-              try {
-                e2.parent.replaceChild(e2.child, e2.wrapper);
-              } catch (e3) {
-                S("domtoimage: failed to restore wrapped node", e3);
-              }
-            }
-          })(), f(), T = [], (() => {
-            P && (P.remove(), P = null), L && clearTimeout(L), L = setTimeout(() => {
-              L = null, V = {};
-            }, 2e4);
-          })();
-        }) : Promise.reject(new Error("dom-to-image-more: a browser DOM is required (SSR)"));
-        function a2(e2) {
-          return e2.replace(/url\(&quot;([^]*?)&quot;\)/g, function(e3, t3) {
-            return 0 <= t3.indexOf("'") ? e3 : `url('${t3}')`;
-          });
-        }
-        function c2(t3) {
-          function e2() {
-          }
-          if (!u2.ensureShown)
-            return e2;
-          var n2 = E(s2);
-          if ("0" === n2.getPropertyValue("opacity") && t3.style.setProperty("opacity", "1"), "none" !== n2.getPropertyValue("display"))
-            return e2;
-          let r2 = s2.style.getPropertyValue("display"), o3 = s2.style.getPropertyPriority("display");
-          return s2.style.removeProperty("display"), "none" === E(s2).getPropertyValue("display") && (n2 = r2 && "none" !== r2 ? r2 : "revert", s2.style.setProperty("display", n2, "important")), function() {
-            var e3 = E(s2).getPropertyValue("display");
-            t3.style.setProperty("display", "none" === e3 ? "block" : e3), r2 ? s2.style.setProperty("display", r2, o3) : s2.style.removeProperty("display");
-          };
-        }
-      }
-      function c(i2, l2) {
-        return a(i2, l2 = l2 || {}).then(p.makeImage).then(function(e2) {
-          var t3 = ((e3) => {
-            let t4 = l2.width || p.width(e3), n3 = l2.height || p.height(e3);
-            p.isDimensionMissing(t4) && (t4 = p.isDimensionMissing(n3) ? 300 : 2 * n3), p.isDimensionMissing(n3) && (n3 = t4 / 2);
-            var r3, e3 = ("number" == typeof l2.scale ? l2.scale : 1) * ("number" == typeof l2.pixelRatio ? l2.pixelRatio : 1), e3 = ((e4, t5, n4) => {
-              var r4 = 16384, o4 = 0 < e4 && 0 < t5 && 0 < n4;
-              return !o4 || (o4 = Math.min(r4 / e4, r4 / t5, Math.sqrt(268435456 / (e4 * t5))), n4 <= o4) ? n4 : (m("dom-to-image-more: the requested " + Math.round(e4 * n4) + "\xD7" + Math.round(t5 * n4) + " canvas exceeds the browser limit; clamping the effective scale from " + n4 + " to " + o4 + ". Capture detail may be reduced \u2014 render a smaller region or lower scale/pixelRatio."), o4);
-            })(t4, n3, e3), o3 = document.createElement("canvas");
-            return o3.width = t4 * e3, o3.height = n3 * e3, l2.bgcolor && ((r3 = o3.getContext("2d")).fillStyle = l2.bgcolor, r3.fillRect(0, 0, o3.width, o3.height)), { canvas: o3, scale: e3, width: t4, height: n3 };
-          })(i2), n2 = t3.canvas, r2 = t3.scale, o2 = n2.getContext("2d");
-          return o2.msImageSmoothingEnabled = false, o2.imageSmoothingEnabled = false, e2 && (o2.scale(r2, r2), o2.drawImage(e2, 0, 0, t3.width, t3.height)), n2;
-        });
-      }
-      let P = null, T = [];
-      function A(n2) {
-        return e.resolveAll().then(function(e2) {
-          var t3;
-          return "" !== e2 && (t3 = document.createElement("style"), n2.appendChild(t3), t3.appendChild(document.createTextNode(e2))), n2;
-        });
-      }
-      function C(e2) {
-        return n.inlineAll(e2).then(function() {
-          return e2;
-        });
-      }
-      function x(e2, t3, n2, r2) {
-        var o2 = 0 <= ["background-clip"].indexOf(t3);
-        r2 ? (e2.setProperty(t3, n2, r2), o2 && e2.setProperty("-webkit-" + t3, n2, r2)) : (e2.setProperty(t3, n2), o2 && e2.setProperty("-webkit-" + t3, n2));
-      }
-      let M = Symbol("dtim-ua-relative-font-size");
-      function I(o2, i2, l2, s2, e2) {
-        let u2 = v.impl.options.copyDefaultStyles ? ((t3, e3) => {
-          var n2, r3 = ((e4) => {
-            var t4 = [];
-            do {
-              if (e4.nodeType === w) {
-                var n3 = e4.tagName;
-                if (t4.push(n3), N.includes(n3))
-                  break;
-              }
-            } while (e4 = e4.parentNode);
-            return t4;
-          })(e3), o3 = ((e4) => ("relaxed" !== t3.styleCaching ? e4 : e4.filter((e5, t4, n3) => 0 === t4 || t4 === n3.length - 1)).join(">"))(r3) + ((t4) => t4 && t4.hasAttribute ? O.filter(function(e4) {
-            return t4.hasAttribute(e4);
-          }).map(function(e4) {
-            return `[${e4}]`;
-          }).join("") : "")(e3);
-          {
-            if (V[o3])
-              return V[o3];
-            n2 = (() => {
-              if (P)
-                return P.contentWindow;
-              t4 = document.characterSet || "UTF-8", e4 = (e4 = document.doctype) ? (`<!DOCTYPE ${s4(e4.name)} ${s4(e4.publicId)} ` + s4(e4.systemId)).trim() + ">" : "", (P = document.createElement("iframe")).id = "domtoimage-sandbox-" + p.uid(), Object.assign(P.style, h), document.body.appendChild(P);
-              var e4, t4, n3 = P, r4 = "domtoimage-sandbox";
-              try {
-                return n3.contentWindow.document.write(e4 + `<html><head><meta charset='${t4}'><title>${r4}</title></head><body></body></html>`), n3.contentWindow;
-              } catch (e5) {
-              }
-              var o4 = document.createElement("meta");
-              o4.setAttribute("charset", t4);
-              try {
-                var i4 = document.implementation.createHTMLDocument(r4), l4 = (i4.head.appendChild(o4), e4 + i4.documentElement.outerHTML);
-                return n3.setAttribute("srcdoc", l4), n3.contentWindow;
-              } catch (e5) {
-              }
-              return n3.contentDocument.head.appendChild(o4), n3.contentDocument.title = r4, n3.contentWindow;
-              function s4(e5) {
-                var t5;
-                return e5 ? ((t5 = document.createElement("div")).innerText = e5, t5.innerHTML) : "";
-              }
-            })();
-            var i3 = r3 = ((e4, t4) => {
-              let n3 = e4.body;
-              do {
-                var r4 = t4.pop(), r4 = e4.createElement(r4);
-                n3.appendChild(r4), n3 = r4;
-              } while (0 < t4.length);
-              return n3.textContent = "\u200B", n3;
-            })(n2.document, r3), l3 = e3, s3 = (l3 && l3.hasAttribute && O.forEach(function(e4) {
-              l3.hasAttribute(e4) && i3.setAttribute(e4, l3.getAttribute(e4));
-            }), e3 = ((e4, t4) => {
-              let n3 = {}, r4 = e4.getComputedStyle(t4), o4 = (p.asArray(r4).forEach(function(e5) {
-                n3[e5] = "width" === e5 || "height" === e5 ? "auto" : r4.getPropertyValue(e5);
-              }), t4.parentElement);
-              return o4 && (t4 = e4.getComputedStyle(o4).getPropertyValue("font-size"), n3[M] = n3["font-size"] !== t4), n3;
-            })(n2, r3), r3);
-            do {
-              var u3 = s3.parentElement;
-              null !== u3 && u3.removeChild(s3), s3 = u3;
-            } while (s3 && "BODY" !== s3.tagName);
-            return V[o3] = e3;
-          }
-        })(o2, i2) : {}, a2 = e2.style;
-        var r2, c2;
-        p.asArray(l2).forEach(function(e3) {
-          var t3, n2, r3;
-          o2.filterStyles && !o2.filterStyles(i2, e3) || (t3 = l2.getPropertyValue(e3), r3 = u2[e3], n2 = s2 ? s2.getPropertyValue(e3) : void 0, a2.getPropertyValue(e3)) || (t3 !== r3 || s2 && t3 !== n2 || "font-size" === e3 && u2[M]) && (r3 = l2.getPropertyPriority(e3), x(a2, e3, t3, r3));
-        }), r2 = l2, c2 = a2, ["top", "right", "bottom", "left"].forEach(function(e3) {
-          var t3, n2 = `border-${e3}-width`, e3 = r2.getPropertyValue(`border-${e3}-style`);
-          e3 && "none" !== e3 && !c2.getPropertyValue(n2) && (e3 = r2.getPropertyValue(n2)) && (t3 = r2.getPropertyPriority(n2), x(c2, n2, e3, t3));
-        });
-      }
-      let L = null, V = {}, N = ["ADDRESS", "ARTICLE", "ASIDE", "BLOCKQUOTE", "DETAILS", "DIALOG", "DD", "DIV", "DL", "DT", "FIELDSET", "FIGCAPTION", "FIGURE", "FOOTER", "FORM", "H1", "H2", "H3", "H4", "H5", "H6", "HEADER", "HGROUP", "HR", "LI", "MAIN", "NAV", "OL", "P", "PRE", "SECTION", "SVG", "TABLE", "UL", "math", "svg", "BODY", "HEAD", "HTML"], O = ["href"];
-    })(exports);
-  }
-});
 
 // src/main.ts
 var main_exports = {};
@@ -899,18 +26,22 @@ var import_obsidian2 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian = require("obsidian");
+
+// src/config.ts
 var DEFAULT_SETTINGS = {
+  defaultsVersion: 1,
+  enabled: true,
   language: "auto",
-  sizeMode: 1,
+  sizeMode: 2,
   idlePlaybackEnabled: false,
   idlePlaybackDelaySec: 45,
   tokenMetric: "word-count",
   maxWordCount: 5e3,
-  holeRadius: 0.014,
+  holeRadius: 0.02,
   lensDepth: 13,
   starGain: 0,
   diskInner: 1.8,
-  diskOuter: 7,
+  diskOuter: 8,
   diskIncl: 1.5,
   diskRoll: 0.35,
   diskGain: 2.2,
@@ -925,22 +56,99 @@ var DEFAULT_SETTINGS = {
   driftSpeed: 1,
   workArea: 0.33,
   dilationMin: 0.2,
-  tokenAreaMin: 3e-3,
-  tokenAreaMax: 0.02,
+  tokenAreaMin: 0.01,
+  tokenAreaMax: 0.5,
   tokenHomeX: 0.96,
   tokenHomeY: 0.04,
   tokenEase: 1,
   tokenReach: 1,
   tokenCalm: 0.04,
   tokenRush: 1.1,
-  nSteps: 10,
+  nSteps: 64,
   workPeriodMin: 55,
   breakMin: 5,
   idleFadeSec: 90,
-  renderScale: 0.35,
+  renderScale: 1,
   captureEnabled: false,
   captureIntervalMs: 2500
 };
+var NUMERIC_LIMITS = {
+  defaultsVersion: [1, 1],
+  sizeMode: [0, 2],
+  idlePlaybackDelaySec: [5, 600],
+  maxWordCount: [100, 5e4],
+  holeRadius: [1e-3, 0.2],
+  lensDepth: [1, 50],
+  starGain: [0, 5],
+  diskInner: [1.6, 10],
+  diskOuter: [3, 30],
+  diskIncl: [0, 3.14],
+  diskRoll: [-3.14, 3.14],
+  diskGain: [0, 10],
+  diskOpacity: [0, 1],
+  diskTemp: [1500, 4e4],
+  dopplerMix: [0, 1],
+  diskBeam: [0, 10],
+  diskSpeed: [0, 20],
+  diskWind: [0, 20],
+  diskContrast: [0, 10],
+  exposure: [0, 10],
+  driftSpeed: [0, 10],
+  workArea: [0, 0.8],
+  dilationMin: [0, 1],
+  tokenAreaMin: [1e-4, 1],
+  tokenAreaMax: [1e-4, 1],
+  tokenHomeX: [0, 1],
+  tokenHomeY: [0, 1],
+  tokenEase: [0.1, 10],
+  tokenReach: [0, 1],
+  tokenCalm: [0, 10],
+  tokenRush: [0, 10],
+  nSteps: [48, 96],
+  workPeriodMin: [10, 120],
+  breakMin: [1, 30],
+  idleFadeSec: [10, 600],
+  renderScale: [0.15, 1],
+  captureIntervalMs: [100, 6e3]
+};
+function normalizeSettings(data) {
+  const settings = { ...DEFAULT_SETTINGS };
+  if (!data || typeof data !== "object" || Array.isArray(data)) return settings;
+  const source = data;
+  for (const key of Object.keys(NUMERIC_LIMITS)) {
+    const value = source[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    const [min, max] = NUMERIC_LIMITS[key];
+    settings[key] = Math.max(min, Math.min(max, value));
+  }
+  if (typeof source.nSteps === "number" && source.nSteps < 48) settings.nSteps = DEFAULT_SETTINGS.nSteps;
+  settings.nSteps = Math.round(settings.nSteps);
+  if (!Number.isInteger(source.sizeMode)) settings.sizeMode = DEFAULT_SETTINGS.sizeMode;
+  for (const key of ["enabled", "idlePlaybackEnabled", "captureEnabled"]) {
+    if (typeof source[key] === "boolean") settings[key] = source[key];
+  }
+  if (source.language === "auto" || source.language === "en" || source.language === "zh-CN") settings.language = source.language;
+  if (source.tokenMetric === "word-count" || source.tokenMetric === "global-word-count" || source.tokenMetric === "file-count" || source.tokenMetric === "tab-count") settings.tokenMetric = source.tokenMetric;
+  if (source.defaultsVersion === void 0 && source.holeRadius === 0.014 && source.tokenAreaMin === 3e-3 && source.tokenAreaMax === 0.02 && source.diskOuter === 7 && source.sizeMode === 1) {
+    settings.holeRadius = DEFAULT_SETTINGS.holeRadius;
+    settings.tokenAreaMin = DEFAULT_SETTINGS.tokenAreaMin;
+    settings.tokenAreaMax = DEFAULT_SETTINGS.tokenAreaMax;
+    settings.diskOuter = DEFAULT_SETTINGS.diskOuter;
+    settings.sizeMode = DEFAULT_SETTINGS.sizeMode;
+    if (source.renderScale === 0.35) settings.renderScale = 0.75;
+  }
+  settings.tokenAreaMax = Math.max(settings.tokenAreaMin, settings.tokenAreaMax);
+  settings.diskOuter = Math.max(settings.diskInner + 0.5, settings.diskOuter);
+  return settings;
+}
+function runtimeRenderScale(settings) {
+  return settings.renderScale;
+}
+function resetEffectSettings(current) {
+  return { ...DEFAULT_SETTINGS, language: current.language, enabled: current.enabled };
+}
+
+// src/settings.ts
 var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -951,8 +159,17 @@ var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
     const t2 = this.plugin.t.bind(this.plugin);
     containerEl.empty();
     containerEl.createEl("h2", { text: t2("settings.title") });
+    new import_obsidian.Setting(containerEl).setName(t2("settings.reset.name")).setDesc(t2("settings.reset.desc")).addButton((button) => button.setButtonText(t2("settings.reset.button")).onClick(async () => {
+      button.setDisabled(true);
+      try {
+        await this.plugin.resetSettings();
+        this.display();
+      } finally {
+        button.setDisabled(false);
+      }
+    }));
     containerEl.createEl("h3", { text: t2("settings.general") });
-    new import_obsidian.Setting(containerEl).setName(t2("settings.language.name")).setDesc(t2("settings.language.desc")).addDropdown((dd) => {
+    new import_obsidian.Setting(containerEl).setName(t2("settings.language.name")).addDropdown((dd) => {
       dd.addOption("auto", t2("settings.language.auto"));
       dd.addOption("en", t2("settings.language.en"));
       dd.addOption("zh-CN", t2("settings.language.zh-CN"));
@@ -1018,6 +235,7 @@ var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
       sl.setValue(this.plugin.settings.workPeriodMin);
       sl.onChange(async (v) => {
         this.plugin.settings.workPeriodMin = v;
+        this.plugin.onParamsChange();
         await this.plugin.saveSettings();
       });
     });
@@ -1026,6 +244,7 @@ var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
       sl.setValue(this.plugin.settings.breakMin);
       sl.onChange(async (v) => {
         this.plugin.settings.breakMin = v;
+        this.plugin.onParamsChange();
         await this.plugin.saveSettings();
       });
     });
@@ -1034,11 +253,12 @@ var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
       sl.setValue(this.plugin.settings.idleFadeSec);
       sl.onChange(async (v) => {
         this.plugin.settings.idleFadeSec = v;
+        this.plugin.onParamsChange();
         await this.plugin.saveSettings();
       });
     });
     containerEl.createEl("h3", { text: t2("settings.section.hole") });
-    this.slider(t2("settings.holeRadius.name"), this.plugin.settings.holeRadius, 1e-3, 0.014, 1e-3, (v) => {
+    this.slider(t2("settings.holeRadius.name"), this.plugin.settings.holeRadius, 1e-3, 0.08, 1e-3, (v) => {
       this.plugin.settings.holeRadius = v;
     });
     this.slider(t2("settings.lensDepth.name"), this.plugin.settings.lensDepth, 1, 50, 0.5, (v) => {
@@ -1051,7 +271,7 @@ var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
     this.slider(t2("settings.diskInner.name"), this.plugin.settings.diskInner, 1.6, 10, 0.1, (v) => {
       this.plugin.settings.diskInner = v;
     });
-    this.slider(t2("settings.diskOuter.name"), this.plugin.settings.diskOuter, 3, 7, 0.5, (v) => {
+    this.slider(t2("settings.diskOuter.name"), this.plugin.settings.diskOuter, 3, 30, 0.5, (v) => {
       this.plugin.settings.diskOuter = v;
     });
     this.slider(t2("settings.diskIncl.name"), this.plugin.settings.diskIncl, 0, 3.14, 0.01, (v) => {
@@ -1077,7 +297,7 @@ var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
     });
     containerEl.createEl("h3", { text: t2("settings.section.performance") });
     new import_obsidian.Setting(containerEl).setName(t2("settings.nSteps.name")).setDesc(t2("settings.nSteps.desc")).addSlider((sl) => {
-      sl.setLimits(6, 10, 1);
+      sl.setLimits(48, 96, 1);
       sl.setValue(this.plugin.settings.nSteps);
       sl.setDynamicTooltip();
       sl.onChange(async (v) => {
@@ -1087,7 +307,7 @@ var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
       });
     });
     new import_obsidian.Setting(containerEl).setName(t2("settings.renderScale.name")).setDesc(t2("settings.renderScale.desc")).addSlider((sl) => {
-      sl.setLimits(0.15, 0.35, 0.05);
+      sl.setLimits(0.15, 1, 0.05);
       sl.setValue(this.plugin.settings.renderScale);
       sl.setDynamicTooltip();
       sl.onChange(async (v) => {
@@ -1104,38 +324,31 @@ var BlackHoleSettingsTab = class extends import_obsidian.PluginSettingTab {
         this.plugin.applyRuntimeSettings();
       });
     });
-    new import_obsidian.Setting(containerEl).setName(t2("settings.captureInterval.name")).setDesc(t2("settings.captureInterval.desc")).addSlider((sl) => {
-      sl.setLimits(2500, 6e3, 250);
-      sl.setValue(this.plugin.settings.captureIntervalMs);
-      sl.setDynamicTooltip();
-      sl.onChange(async (v) => {
-        this.plugin.settings.captureIntervalMs = v;
-        await this.plugin.saveSettings();
-        this.plugin.applyRuntimeSettings();
-      });
-    });
-    this.slider(t2("settings.tokenAreaMax.name"), this.plugin.settings.tokenAreaMax * 1e3, 0.1, 20, 0.1, (v) => {
+    this.slider(t2("settings.tokenAreaMax.name"), this.plugin.settings.tokenAreaMax * 1e3, this.plugin.settings.tokenAreaMin * 1e3, Math.max(500, this.plugin.settings.tokenAreaMin * 1e3), 0.1, (v) => {
       this.plugin.settings.tokenAreaMax = v / 1e3;
     });
   }
   slider(name, value, min, max, step, onChange) {
+    let slider;
+    let text;
+    const update = async (v) => {
+      slider.setValue(v);
+      text.setValue(String(v));
+      onChange(v);
+      this.plugin.onParamsChange();
+      await this.plugin.saveSettings();
+    };
     new import_obsidian.Setting(this.containerEl).setName(name).addSlider((sl) => {
+      slider = sl;
       sl.setLimits(min, max, step);
       sl.setValue(value);
-      sl.onChange(async (v) => {
-        onChange(v);
-        await this.plugin.saveSettings();
-        this.plugin.onParamsChange();
-      });
+      sl.onChange(update);
     }).addText((txt) => {
+      text = txt;
       txt.setValue(String(value));
       txt.onChange(async (s) => {
-        const v = parseFloat(s);
-        if (!isNaN(v) && v >= min && v <= max) {
-          onChange(v);
-          await this.plugin.saveSettings();
-          this.plugin.onParamsChange();
-        }
+        const v = Number(s);
+        if (s.trim() && Number.isFinite(v) && v >= min && v <= max) await update(v);
       });
     });
   }
@@ -1150,32 +363,27 @@ void main() {
     gl_Position = vec4(aPos, 0.0, 1.0);
 }
 `;
-function makeFS(p, useMediump = false) {
+function makeFS(p) {
   return `#version 300 es
-precision ${useMediump ? "mediump" : "highp"} float;
-precision ${useMediump ? "mediump" : "highp"} int;
+precision highp float;
+precision highp int;
 
 // ---- uniforms (set by renderer every frame) ----
 uniform vec2  uResolution;
 uniform float uTime;
-uniform float uTimeDelta;
-uniform int   uFrame;
+uniform float uDemoTime;
 uniform sampler2D uTexture;
-uniform vec4  uDate;
-uniform float uLastActivity;
-uniform float uTokenLevel;
-uniform float uTokenPrev;
-uniform float uTokenChangeTime;
+uniform vec4 uCaptureRect;
 uniform int   uSizeMode;
 uniform int   uCaptureEnabled;
 uniform vec2  uViewportOrigin;
 uniform vec2  uViewportSize;
+uniform vec4 uEffect; // center (top-left UV), radius, intensity
 
 in vec2 vUv;
 out vec4 fragColor;
 
 // ---- tunable consts (injected from settings) ----
-const float HOLE_RADIUS   = ${p.holeRadius.toFixed(4)};
 const float LENS_DEPTH    = ${p.lensDepth.toFixed(4)};
 const float STAR_GAIN     = ${p.starGain.toFixed(4)};
 const float DISK_INNER    = ${p.diskInner.toFixed(4)};
@@ -1192,28 +400,10 @@ const float DISK_WIND     = ${p.diskWind.toFixed(4)};
 const float DISK_CONTRAST = ${p.diskContrast.toFixed(4)};
 const float EXPOSURE      = ${p.exposure.toFixed(4)};
 const float DRIFT_SPEED   = ${p.driftSpeed.toFixed(4)};
-const float WORK_AREA     = ${p.workArea.toFixed(4)};
 const float DILATION_MIN  = ${p.dilationMin.toFixed(4)};
-const float TOKEN_AREA_MIN= ${p.tokenAreaMin.toFixed(4)};
-const float TOKEN_AREA_MAX= ${p.tokenAreaMax.toFixed(4)};
-const float TOKEN_HOME_X  = ${p.tokenHomeX.toFixed(4)};
-const float TOKEN_HOME_Y  = ${p.tokenHomeY.toFixed(4)};
-const float TOKEN_EASE    = ${p.tokenEase.toFixed(4)};
-const float TOKEN_REACH   = ${p.tokenReach.toFixed(4)};
-const float TOKEN_CALM    = ${p.tokenCalm.toFixed(4)};
-const float TOKEN_RUSH    = ${p.tokenRush.toFixed(4)};
-const float WORK_PERIOD_MIN = ${p.workPeriodMin.toFixed(4)};
-const float BREAK_MIN       = ${p.breakMin.toFixed(4)};
-const float IDLE_FADE_SEC   = ${p.idleFadeSec.toFixed(4)};
-const float TOKEN_GLIDE_MIN  = ${p.tokenGlideMin.toFixed(4)};
-const float TOKEN_GLIDE_MAX  = ${p.tokenGlideMax.toFixed(4)};
-const float TOKEN_GLIDE_RATE = ${p.tokenGlideRate.toFixed(4)};
-const float TIME_SCALE      = 1.0000;
 const float DEMO_SEC        = 42.0000;
-const float DEMO_GROW_SEC   = 40.0000;
 const float DEMO_XFADE      = 0.1800;
 const float ALPHA_EPS       = 0.0100;
-const float SIZE_GAIN       = 0.5500;
 
 const int N_STEPS = ${p.nSteps};
 const int MODE_POMODORO = 0;
@@ -1235,6 +425,20 @@ float vnoiseWrapY(vec2 p, float perY) {
     return mix(mix(hash21(vec2(i.x, y0)),       hash21(vec2(i.x + 1.0, y0)), f.x),
                mix(hash21(vec2(i.x, y1)),       hash21(vec2(i.x + 1.0, y1)), f.x),
                f.y);
+}
+
+vec4 workspaceSample(vec2 screenUV) {
+    vec2 uv = (screenUV - uCaptureRect.xy) / max(uCaptureRect.zw, vec2(1e-6));
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec4(0.0);
+    return texture(uTexture, uv);
+}
+
+vec4 lensSample(vec2 destination, vec2 source) {
+    vec2 dest = (destination - uCaptureRect.xy) / max(uCaptureRect.zw, vec2(1e-6));
+    if (any(lessThan(dest, vec2(0.0))) || any(greaterThan(dest, vec2(1.0)))) return vec4(0.0);
+    vec2 local = (source - uCaptureRect.xy) / max(uCaptureRect.zw, vec2(1e-6));
+    vec2 inset = 0.5 / vec2(textureSize(uTexture, 0));
+    return texture(uTexture, clamp(local, inset, vec2(1.0) - inset));
 }
 
 vec2 mirrorUV(vec2 u) { return 1.0 - abs(1.0 - mod(u, 2.0)); }
@@ -1309,23 +513,15 @@ DiskLook mixLook(DiskLook a, DiskLook b, float f) {
 }
 
 DiskLook demoLook() {
-    float u = mod(uTime, DEMO_SEC) / DEMO_SEC * float(DEMO_N);
+    float u = mod(uDemoTime, DEMO_SEC) / DEMO_SEC * float(DEMO_N);
     int   i = int(min(u, float(DEMO_N) - 0.001));
     float f = smoothstep(1.0 - DEMO_XFADE, 1.0, fract(u));
     return mixLook(DEMO_TOUR[i], DEMO_TOUR[(i + 1) % DEMO_N], f);
 }
 
-// --------------------------------------------------------------- token glide --
-float glidedToken(float cur, float prev, float tChange) {
-    if (cur < 0.0) return -1.0;
-    if (prev < 0.0) return cur;
-    float T = clamp(abs(cur - prev) * TOKEN_GLIDE_RATE, TOKEN_GLIDE_MIN, TOKEN_GLIDE_MAX);
-    return mix(prev, cur, smoothstep(0.0, T, uTime - tChange));
-}
-
 // ------------------------------------------------------------------- image --
 void main() {
-    vec2 uv = uViewportOrigin + vUv * uViewportSize;
+    vec2 uv = uViewportOrigin + vec2(vUv.x, 1.0 - vUv.y) * uViewportSize;
     vec2  res    = uResolution;
     float aspect = res.x / res.y;
     float t = uTime * DRIFT_SPEED;
@@ -1336,67 +532,11 @@ void main() {
     float rin  = max(L.inner, 1.6);
     float rout = max(L.outer, rin + 0.5);
 
-    float I, sz;
-    vec2  center;
-
-    if (uSizeMode == MODE_POMODORO) {
-        float workSec  = WORK_PERIOD_MIN * 60.0;
-        float cycleSec = workSec + BREAK_MIN * 60.0;
-        float wall     = uDate.w + uTime * (TIME_SCALE - 1.0);
-        float phase    = mod(wall, cycleSec);
-        float collapse = min(60.0, workSec * 0.15);
-        float grow = clamp(phase / workSec, 0.0, 1.0)
-                   * (1.0 - smoothstep(workSec - collapse, workSec, phase));
-        I = mix(0.12, 1.0, grow);
-        float idle = max(0.0, uTime - uLastActivity);
-        I *= 1.0 - smoothstep(IDLE_FADE_SEC, max(BREAK_MIN * 60.0, IDLE_FADE_SEC + 1.0), idle);
-        sz = mix(0.22, 1.0, I);
-        float ext = (rout / B_CRIT) * HOLE_RADIUS * sz * SIZE_GAIN;
-        float yLo = WORK_AREA + 0.12 + ext;
-        float yHi = max(yLo, 0.90 - ext);
-        float spd = mix(0.35, 1.0, I);
-        center = vec2(
-            0.5 + (0.24 * sin(t * 0.21) + 0.05 * sin(t * 0.083)) * spd,
-            1.0 - mix(yLo, yHi, 0.5 + (0.42 * sin(t * 0.157 + 2.0) + 0.08 * sin(t * 0.117)) * spd));
-        center += I * vec2(0.040 * sin(t * 0.83) + 0.020 * sin(t * 1.31),
-                           0.030 * sin(t * 1.03 + 1.0));
-    } else {
-        float lvl;
-        if (uSizeMode == MODE_DEMO) {
-            lvl = min(mod(uTime, DEMO_SEC) / DEMO_GROW_SEC, 1.0);
-        } else {
-            lvl = glidedToken(uTokenLevel, uTokenPrev, uTokenChangeTime);
-        }
-        if (lvl < 0.0) { fragColor = vec4(0.0); return; }
-        float g = pow(clamp(lvl, 0.0, 1.0), TOKEN_EASE);
-        I = mix(0.10, 1.0, g);
-        float rhMin = sqrt(TOKEN_AREA_MIN * aspect / 3.1415927);
-        float rhMax = sqrt(TOKEN_AREA_MAX * aspect / 3.1415927);
-        float rhT = mix(rhMin, rhMax, g) * (HOLE_RADIUS / 0.08) * SIZE_GAIN;
-        sz = rhT / max(HOLE_RADIUS, 1e-4);
-        float marg = min(rhT * mix(1.45, 0.90, g), 0.5 * (1.0 - WORK_AREA - 0.03));
-        float xPad = marg / aspect;
-        vec2  fullLo = vec2(min(xPad, 0.5), marg);
-        vec2  fullHi = vec2(max(0.5, 1.0 - xPad),
-                            max(marg, 1.0 - (WORK_AREA + 0.03 + marg)));
-        vec2  corner = clamp(vec2(TOKEN_HOME_X, TOKEN_HOME_Y), fullLo, fullHi);
-        float reach  = mix(0.06, max(TOKEN_REACH, 0.06), g);
-        vec2  lo = vec2(mix(corner.x, fullLo.x, reach), fullLo.y);
-        vec2  hi = vec2(fullHi.x, mix(corner.y, fullHi.y, reach));
-        vec2  room   = max((hi - lo) * 0.5, vec2(0.0));
-        vec2  wobAmp = min(vec2(0.010 + 0.030 * g), max(room * 0.35, vec2(0.006)));
-        vec2  ampEff = max(room - wobAmp, vec2(0.0));
-        vec2  wander = mix(lissa(t * TOKEN_CALM), lissa(t * TOKEN_RUSH), g);
-        center = (lo + hi) * 0.5 + wander * ampEff
-               + wobAmp * vec2(cos(t * 0.8), sin(t * 1.0));
-    }
-
+    float I = uEffect.w;
+    vec2 center = uEffect.xy;
+    float rh = uEffect.z;
     float vis = smoothstep(0.0, 0.10, I);
-    if (vis <= 0.0) {
-        fragColor = vec4(0.0);
-        return;
-    }
-    float rh = HOLE_RADIUS * sz * SIZE_GAIN;
+    if (vis <= 0.0 || rh <= 0.0) { fragColor = vec4(0.0); return; }
     float dil = mix(1.0, DILATION_MIN, I);
     // Overlay model: the canvas is transparent except near the hole, so the
     // live Obsidian DOM shows through everywhere else. "shield" is the effect
@@ -1413,6 +553,16 @@ void main() {
 
     float window = exp(-pow(plen / (7.0 * rh), 2.0));
     float cover = window * shield;
+    // Fade coordinates to identity BEFORE fading opacity. Blending displaced
+    // text with live, undisplaced DOM draws two copies of every glyph.
+    float warp = cover * smoothstep(0.04, 0.10, cover);
+    float replacement = smoothstep(ALPHA_EPS, 0.03, cover);
+    if (uCaptureEnabled != 0) {
+        vec2 edge = min(uv - uCaptureRect.xy, uCaptureRect.xy + uCaptureRect.zw - uv) * res;
+        float edgePx = min(edge.x, edge.y);
+        warp *= smoothstep(8.0, 24.0, edgePx);
+        replacement *= smoothstep(0.0, 4.0, edgePx);
+    }
     if (cover < ALPHA_EPS) {
         fragColor = vec4(0.0);
         return;
@@ -1424,15 +574,18 @@ void main() {
     // far field
     if (b >= bmax) {
         vec3  term = vec3(0.0);
+        float sampleAlpha = 0.0;
         if (uCaptureEnabled != 0) {
             float uu   = Z0 * inversesqrt(Z0 * Z0 + b * b);
             float defl = (2.0 / (W * W)) / max(plen, 1e-4)
                        * (1.29 * uu + 0.07) * max(LENS_DEPTH - 2.14 * uu + 0.75, 0.0)
-                       * cover;
+                       * warp;
             vec2  dir  = p / max(plen, 1e-5);
             vec2  sp   = p - dir * defl;
             vec2  suv  = mirrorUV(center + sp / vec2(aspect, 1.0));
-            term = texture(uTexture, suv).rgb;
+            vec4 sampleColor = lensSample(uv, suv);
+            term = sampleColor.rgb;
+            sampleAlpha = sampleColor.a;
         }
         vec3 sky = vec3(0.0);
         if (L.star > 0.0) {
@@ -1441,7 +594,7 @@ void main() {
         }
         // straight-alpha overlay: coverage fades out away from the hole so the
         // live DOM shows through; near the hole we reveal the lensed sample.
-        float a = clamp(cover, 0.0, 1.0);
+        float a = clamp(max(replacement * sampleAlpha, max(sky.r, max(sky.g, sky.b))), 0.0, 1.0);
         fragColor = vec4(term + sky, a);
         return;
     }
@@ -1513,6 +666,9 @@ void main() {
     if (!captured && dot(x, x) < 4.0) captured = true;
 
     vec3 bg = vec3(0.0);
+    // Even a ray that turns away from the captured plane must occlude the
+    // original note. Otherwise the photon-ring region leaks unwarped glyphs.
+    float sampleAlpha = uCaptureEnabled != 0 ? workspaceSample(uv).a : 0.0;
     if (!captured) {
         vec3 dd = normalize(v);
         if (L.star > 0.0) {
@@ -1523,9 +679,11 @@ void main() {
             vec3  hp  = x + dd * tpl;
             vec2  q   = rot(hp.xy, -L.roll) / W;
             vec2  sp  = vec2(q.x, -q.y);
-            vec2  suv = mirrorUV(center + (p + (sp - p) * cover) / vec2(aspect, 1.0));
+            vec2  suv = mirrorUV(center + (p + (sp - p) * warp) / vec2(aspect, 1.0));
             float toward = smoothstep(0.05, 0.35, -dd.z);
-            bg += texture(uTexture, suv).rgb * toward;
+            vec4 sampleColor = lensSample(uv, suv);
+            sampleAlpha = max(sampleAlpha, sampleColor.a);
+            bg += sampleColor.rgb * sampleColor.a * toward;
         }
     }
 
@@ -1534,7 +692,7 @@ void main() {
     vec3 col = bg * trans + emitRGB;
     // Coverage: opaque inside the shadow, bright where the disk emits, and the
     // lensing window elsewhere \u2014 transparent (live DOM) far from the hole.
-    float a = captured ? 1.0 : clamp(max(cover, emitLum), 0.0, 1.0);
+    float a = captured ? 1.0 : clamp(max(replacement * sampleAlpha, max(emitLum, max(bg.r, max(bg.g, bg.b)))), 0.0, 1.0);
     fragColor = vec4(col, a);
 }
 `;
@@ -1548,10 +706,12 @@ var DEMO_SEC = 42;
 var DEMO_GROW_SEC = 40;
 var B_CRIT = 2.5980762;
 var EFFECT_ALPHA_CUTOFF = 0.01;
-var SIZE_GAIN = 0.55;
+var MAX_RENDER_PIXELS = 2097152;
+var MAX_RENDER_DIMENSION = 4096;
+var MAX_DEVICE_PIXEL_RATIO = 2;
 var VIEWPORT_PAD_PX = 24;
 var VIEWPORT_SNAP_PX = 32;
-var DEFAULT_FRAME_INTERVAL_MS = 1e3 / 18;
+var DEFAULT_FRAME_INTERVAL_MS = 1e3 / 60;
 var SOFTWARE_FRAME_INTERVAL_MS = 1e3 / 10;
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -1560,8 +720,7 @@ function mix(a, b, t2) {
   return a + (b - a) * t2;
 }
 function smoothstep(edge0, edge1, value) {
-  if (edge0 === edge1)
-    return value < edge0 ? 0 : 1;
+  if (edge0 === edge1) return value < edge0 ? 0 : 1;
   const t2 = clamp((value - edge0) / (edge1 - edge0), 0, 1);
   return t2 * t2 * (3 - 2 * t2);
 }
@@ -1583,6 +742,10 @@ var BlackHoleRenderer = class {
     this.animId = 0;
     this.running = false;
     this.workspaceTex = null;
+    this.demoStart = performance.now() / 1e3;
+    this.gpuFence = null;
+    this.fenceCreatedAt = 0;
+    this.captureRect = { x: 0, y: 0, width: 1, height: 1 };
     // state
     this.tokenLevel = 0;
     this.prevTokenLevel = 0;
@@ -1595,39 +758,68 @@ var BlackHoleRenderer = class {
     this.softwareRenderer = false;
     /** When true, auto-drop render scale if frames stay slow. */
     this.autoQuality = true;
-    /** Backing-store resolution factor (CSS px × this). The canvas is stretched
-     *  to 100% via CSS, so < 1 renders fewer fragments — a big GPU win. */
+    /** Requested fraction of display resolution; pixel and GPU budgets apply below. */
     this.renderScale = 1;
-    this.minRenderScale = 0.25;
+    this.qualityFactor = 1;
+    this.minQualityFactor = 0.25;
+    this.minRenderScale = 0.15;
     this.dtAvg = 0;
     // EMA of frame time (s)
     this.lastScaleAdjust = 0;
     // timestamp guard for auto-downscale
     this.prevTime = 0;
-    this.lastDrawTime = 0;
-    this.frameCount = 0;
+    this.nextDrawTime = 0;
     this.startTime = 0;
     this.frameIntervalMs = DEFAULT_FRAME_INTERVAL_MS;
     this.viewportRect = null;
+    this.disposed = false;
+    this.compileGeneration = 0;
+    this.effectState = { x: 0.5, y: 0.5, radius: 0, intensity: 0 };
+    this.onFatalError = null;
+    this.lastError = "";
+    this.onEffectFrame = null;
+    this.contextLost = (event) => {
+      event.preventDefault();
+      this.stop();
+      this.lastError = "WebGL context lost; toggle the effect to retry.";
+      this.onFatalError?.(this.lastError);
+    };
     this.loop = (now) => {
-      if (!this.running || !this.gl || !this.program)
-        return;
+      if (!this.running || !this.gl || !this.program) return;
       this.animId = requestAnimationFrame(this.loop);
-      if (this.lastDrawTime && now - this.lastDrawTime < this.frameIntervalMs)
-        return;
+      if (now + 0.5 < this.nextDrawTime) return;
+      if (this.gpuFence) {
+        const gl = this.gl;
+        const status = gl.clientWaitSync(this.gpuFence, 0, 0);
+        if (status === gl.TIMEOUT_EXPIRED) {
+          if (now - this.fenceCreatedAt > 2e3) {
+            this.stop();
+            this.onFatalError?.("GPU frame exceeded the 2s safety budget.");
+          }
+          return;
+        }
+        gl.deleteSync(this.gpuFence);
+        this.gpuFence = null;
+        if (status === gl.WAIT_FAILED) {
+          this.stop();
+          this.onFatalError?.("GPU frame synchronization failed.");
+          return;
+        }
+      }
       try {
         this.renderFrame(now);
-        this.lastDrawTime = now;
+        this.nextDrawTime = this.nextDrawTime ? this.nextDrawTime + Math.max(1, Math.floor((now + 0.5 - this.nextDrawTime) / this.frameIntervalMs) + 1) * this.frameIntervalMs : now + this.frameIntervalMs;
       } catch (e) {
         console.error("BlackHole: render loop error \u2014 stopping renderer.", e);
         this.stop();
+        this.onFatalError?.("Render loop failed.");
       }
     };
     this.canvas = canvas;
     this.params = { ...params };
     this.resizeObserver = new ResizeObserver(() => this.resize());
   }
-  init() {
+  async init(options = {}) {
     const gl = this.canvas.getContext("webgl2", {
       alpha: true,
       premultipliedAlpha: false,
@@ -1636,12 +828,16 @@ var BlackHoleRenderer = class {
       // Ask the OS/Electron for the discrete/high-performance GPU rather than
       // an integrated or software fallback — the geodesic shader is heavy.
       powerPreference: "high-performance",
-      // Let the compositor present without forcing main-thread sync each frame.
-      desynchronized: true
+      // Normal compositor presentation retains the last image between draws;
+      // low-latency desynchronized scanout can expose clears on some drivers.
+      desynchronized: false
     });
-    if (!gl)
+    if (!gl) {
+      this.lastError = "WebGL2 context unavailable.";
       return false;
+    }
     this.gl = gl;
+    this.canvas.addEventListener("webglcontextlost", this.contextLost);
     try {
       const dbg = gl.getExtension("WEBGL_debug_renderer_info");
       const rendererName = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : "";
@@ -1649,15 +845,16 @@ var BlackHoleRenderer = class {
       this.softwareRenderer = /swiftshader|llvmpipe|software|basic render/i.test(rendererName);
       if (this.softwareRenderer) {
         this.frameIntervalMs = SOFTWARE_FRAME_INTERVAL_MS;
-        const isWayland = typeof navigator !== "undefined" && /Wayland|wayland/i.test(navigator.userAgent);
-        console.warn(
-          "BlackHole: running on a SOFTWARE WebGL renderer (" + rendererName + "). Hardware GPU is not being used for WebGL.\n" + (isWayland ? "This is a known Electron+Wayland+NVIDIA issue. Fix:\n  Run Obsidian with --ozone-platform=x11 via ~/.config/obsidian/user-flags.conf\n  (created automatically \u2014 restart Obsidian to apply)." : 'Check that your GPU drivers are installed and Obsidian/Electron is not started with --disable-gpu.\n  See Settings > Appearance > Advanced and ensure "Hardware acceleration" is ON.')
-        );
+        if (!options.allowSoftware) {
+          this.lastError = "Software WebGL detected. Effect disabled to protect the editor; enable hardware acceleration and restart Obsidian.";
+          console.warn("BlackHole:", this.lastError);
+          return false;
+        }
       }
     } catch {
     }
-    if (!this.buildProgram())
-      return false;
+    if (!await this.buildProgram(this.params)) return false;
+    if (this.disposed || this.gl !== gl || gl.isContextLost()) return false;
     this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
     this.vertexBuffer = gl.createBuffer();
@@ -1700,135 +897,155 @@ var BlackHoleRenderer = class {
     return true;
   }
   /** Recompile with new shader params (e.g. after settings change). */
-  recompile(params) {
-    this.params = { ...params };
-    const oldProgram = this.program;
-    if (!this.buildProgram())
-      return;
-    if (oldProgram && this.gl)
-      this.gl.deleteProgram(oldProgram);
+  async recompile(params) {
+    return this.buildProgram({ ...params });
   }
   start() {
-    if (this.running)
-      return;
+    if (this.running || this.disposed || !this.program) return;
     this.running = true;
     this.prevTime = performance.now();
-    this.lastDrawTime = 0;
+    this.dtAvg = 0;
+    this.nextDrawTime = 0;
     this.startTime = this.prevTime;
-    this.loop(this.prevTime);
+    this.animId = requestAnimationFrame(this.loop);
   }
   stop() {
     this.running = false;
-    if (this.animId)
-      cancelAnimationFrame(this.animId);
+    if (this.animId) cancelAnimationFrame(this.animId);
     this.animId = 0;
   }
   /** Upload a captured workspace canvas to the texture. */
-  updateTexture(captureCanvas) {
-    if (!this.gl || !this.workspaceTex)
-      return;
+  updateTexture(captureCanvas, rect = { x: 0, y: 0, width: 1, height: 1 }) {
+    if (!this.gl || !this.workspaceTex) return;
     const gl = this.gl;
+    this.captureRect = { ...rect };
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.workspaceTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, captureCanvas);
   }
   resize() {
-    if (!this.gl)
-      return;
+    if (!this.gl) return;
     this.viewportRect = null;
-    this.updateViewportRect({ x: 0, y: 0, width: 1, height: 1 });
   }
-  /** Set the backing-store resolution factor and re-size immediately. */
+  /** Request a backing-store scale change for the next complete draw. */
   setRenderScale(scale) {
-    this.renderScale = Math.max(this.minRenderScale, Math.min(1, scale));
-    if (this.viewportRect)
-      this.updateViewportRect(this.viewportRect);
-    else
-      this.resize();
+    if (!Number.isFinite(scale)) return;
+    const requested = Math.max(this.minRenderScale, Math.min(1, scale));
+    if (requested !== this.renderScale) this.qualityFactor = 1;
+    this.renderScale = requested;
   }
   getSize() {
     return { width: this.canvas.width, height: this.canvas.height };
   }
   destroy() {
+    this.disposed = true;
+    this.compileGeneration++;
     this.stop();
+    this.canvas.removeEventListener("webglcontextlost", this.contextLost);
     this.resizeObserver.disconnect();
     const gl = this.gl;
-    if (gl && this.program)
-      gl.deleteProgram(this.program);
-    if (gl && this.vao)
-      gl.deleteVertexArray(this.vao);
-    if (gl && this.vertexBuffer)
-      gl.deleteBuffer(this.vertexBuffer);
-    if (gl && this.workspaceTex)
-      gl.deleteTexture(this.workspaceTex);
+    if (gl && this.gpuFence) gl.deleteSync(this.gpuFence);
+    this.gpuFence = null;
+    if (gl && this.program) gl.deleteProgram(this.program);
+    if (gl && this.vao) gl.deleteVertexArray(this.vao);
+    if (gl && this.vertexBuffer) gl.deleteBuffer(this.vertexBuffer);
+    if (gl && this.workspaceTex) gl.deleteTexture(this.workspaceTex);
     this.program = null;
     this.vao = null;
     this.vertexBuffer = null;
     this.workspaceTex = null;
     this.gl = null;
+    this.onEffectFrame = null;
   }
   // ---- internal ----
-  buildProgram() {
+  async buildProgram(params) {
     const gl = this.gl;
-    const vs = this.compile(gl.VERTEX_SHADER, VS);
-    const fs = this.compile(gl.FRAGMENT_SHADER, makeFS(this.params, this.softwareRenderer));
-    if (!vs || !fs)
-      return false;
+    if (!gl || this.disposed) return false;
+    const generation = ++this.compileGeneration;
+    const vs = gl.createShader(gl.VERTEX_SHADER);
+    const fs = gl.createShader(gl.FRAGMENT_SHADER);
     const prog = gl.createProgram();
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.bindAttribLocation(prog, POSITION_ATTRIB_LOCATION, "aPos");
-    gl.linkProgram(prog);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error("Shader link error:", gl.getProgramInfoLog(prog));
-      gl.deleteProgram(prog);
+    if (!vs || !fs || !prog) {
+      if (vs) gl.deleteShader(vs);
+      if (fs) gl.deleteShader(fs);
+      if (prog) gl.deleteProgram(prog);
+      this.lastError = "Unable to allocate WebGL program.";
       return false;
     }
-    this.program = prog;
-    gl.useProgram(prog);
-    this.uResolution = gl.getUniformLocation(prog, "uResolution");
-    this.uTime = gl.getUniformLocation(prog, "uTime");
-    this.uTimeDelta = gl.getUniformLocation(prog, "uTimeDelta");
-    this.uFrame = gl.getUniformLocation(prog, "uFrame");
-    this.uTexture = gl.getUniformLocation(prog, "uTexture");
-    this.uDate = gl.getUniformLocation(prog, "uDate");
-    this.uLastActivity = gl.getUniformLocation(prog, "uLastActivity");
-    this.uTokenLevel = gl.getUniformLocation(prog, "uTokenLevel");
-    this.uTokenPrev = gl.getUniformLocation(prog, "uTokenPrev");
-    this.uTokenChangeTime = gl.getUniformLocation(prog, "uTokenChangeTime");
-    this.uSizeMode = gl.getUniformLocation(prog, "uSizeMode");
-    this.uCaptureEnabled = gl.getUniformLocation(prog, "uCaptureEnabled");
-    this.uViewportOrigin = gl.getUniformLocation(prog, "uViewportOrigin");
-    this.uViewportSize = gl.getUniformLocation(prog, "uViewportSize");
-    return true;
-  }
-  compile(type, source) {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error("Shader compile error:", gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
+    let accepted = false;
+    try {
+      gl.shaderSource(vs, VS);
+      gl.shaderSource(fs, makeFS(params));
+      gl.compileShader(vs);
+      gl.compileShader(fs);
+      gl.attachShader(prog, vs);
+      gl.attachShader(prog, fs);
+      gl.bindAttribLocation(prog, POSITION_ATTRIB_LOCATION, "aPos");
+      gl.linkProgram(prog);
+      const parallel = gl.getExtension("KHR_parallel_shader_compile");
+      const deadline = performance.now() + 5e3;
+      if (parallel) {
+        while (!gl.getProgramParameter(prog, parallel.COMPLETION_STATUS_KHR)) {
+          if (this.disposed || generation !== this.compileGeneration || gl.isContextLost()) return false;
+          if (performance.now() > deadline) throw new Error("Shader compilation exceeded 5s budget.");
+          await new Promise((resolve) => setTimeout(resolve, 16));
+        }
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      if (this.disposed || generation !== this.compileGeneration || gl.isContextLost()) return false;
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        throw new Error(gl.getProgramInfoLog(prog) || gl.getShaderInfoLog(fs) || "Shader link failed");
+      }
+      const oldProgram = this.program;
+      this.program = prog;
+      this.params = params;
+      gl.useProgram(prog);
+      if (oldProgram) gl.deleteProgram(oldProgram);
+      accepted = true;
+      this.uResolution = gl.getUniformLocation(prog, "uResolution");
+      this.uTime = gl.getUniformLocation(prog, "uTime");
+      this.uDemoTime = gl.getUniformLocation(prog, "uDemoTime");
+      this.uTexture = gl.getUniformLocation(prog, "uTexture");
+      this.uCaptureRect = gl.getUniformLocation(prog, "uCaptureRect");
+      this.uSizeMode = gl.getUniformLocation(prog, "uSizeMode");
+      this.uCaptureEnabled = gl.getUniformLocation(prog, "uCaptureEnabled");
+      this.uViewportOrigin = gl.getUniformLocation(prog, "uViewportOrigin");
+      this.uViewportSize = gl.getUniformLocation(prog, "uViewportSize");
+      this.uEffect = gl.getUniformLocation(prog, "uEffect");
+      return true;
+    } catch (error) {
+      this.lastError = String(error);
+      console.error("BlackHole: shader build failed", error);
+      return false;
+    } finally {
+      gl.deleteShader(vs);
+      gl.deleteShader(fs);
+      if (!accepted) gl.deleteProgram(prog);
     }
-    return shader;
   }
   renderFrame(now) {
     const gl = this.gl;
-    const dt = Math.min((now - this.prevTime) / 1e3, 0.1);
+    const dt = Math.min((now - this.prevTime) / 1e3, 1);
     this.prevTime = now;
-    this.frameCount++;
+    const targetSeconds = this.frameIntervalMs / 1e3;
     this.dtAvg = this.dtAvg ? this.dtAvg * 0.9 + dt * 0.1 : dt;
-    if (this.autoQuality && now - this.startTime > 3e3 && this.dtAvg > 0.033 && this.renderScale > this.minRenderScale && now - this.lastScaleAdjust > 2e3) {
+    if (this.autoQuality && this.viewportRect && now - this.startTime > 3e3 && this.dtAvg > Math.max(0.05, targetSeconds * 1.8) && now - this.lastScaleAdjust > 2e3) {
       this.lastScaleAdjust = now;
-      this.setRenderScale(this.renderScale - 0.15);
-      console.warn(
-        `BlackHole: low FPS (~${Math.round(1 / this.dtAvg)}) \u2014 render scale \u2192 ${this.renderScale.toFixed(2)}`
-      );
-      this.dtAvg = 0.025;
+      if (this.qualityFactor > this.minQualityFactor) {
+        this.qualityFactor = Math.max(this.minQualityFactor, this.qualityFactor * 0.8);
+      } else {
+        this.stop();
+        this.onFatalError?.("Rendering exceeded the frame budget at minimum quality.");
+        return;
+      }
+      this.dtAvg = targetSeconds;
+    }
+    if (this.lastTokenLevel !== this.tokenLevel) {
+      const current = this.glidedToken(now / 1e3, this.lastTokenLevel);
+      this.prevTokenLevel = current;
+      this.lastTokenLevel = this.tokenLevel;
+      this.lastTokenChange = now / 1e3;
     }
     gl.useProgram(this.program);
     const d = /* @__PURE__ */ new Date();
@@ -1843,6 +1060,7 @@ var BlackHoleRenderer = class {
       return;
     }
     const viewportRect = this.ensureViewportRect(bounds, viewportSize.width, viewportSize.height);
+    this.updateViewportRect(viewportRect);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.uniform2f(this.uResolution, viewportSize.width, viewportSize.height);
     gl.uniform2f(
@@ -1855,30 +1073,40 @@ var BlackHoleRenderer = class {
       viewportRect.width / viewportSize.width,
       viewportRect.height / viewportSize.height
     );
-    gl.uniform1f(this.uTime, now / 1e3);
-    gl.uniform1f(this.uTimeDelta, dt);
-    gl.uniform1i(this.uFrame, this.frameCount);
-    gl.uniform1f(this.uLastActivity, this.lastActivity);
-    gl.uniform4f(
-      this.uDate,
-      d.getFullYear(),
-      d.getMonth() + 1,
-      d.getDate(),
-      d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()
-    );
-    if (this.lastTokenLevel !== this.tokenLevel) {
-      this.prevTokenLevel = this.lastTokenLevel;
-      this.lastTokenLevel = this.tokenLevel;
-      this.lastTokenChange = now / 1e3;
-    }
-    gl.uniform1f(this.uTokenLevel, this.tokenLevel);
-    gl.uniform1f(this.uTokenPrev, this.prevTokenLevel);
-    gl.uniform1f(this.uTokenChangeTime, this.lastTokenChange);
+    gl.uniform1f(this.uTime, this.sizeMode === MODE_DEMO ? Math.max(0, now / 1e3 - this.demoStart) : now / 1e3);
+    gl.uniform1f(this.uDemoTime, Math.max(0, now / 1e3 - this.demoStart));
     gl.uniform1i(this.uSizeMode, this.sizeMode);
     gl.uniform1i(this.uCaptureEnabled, this.captureEnabled ? 1 : 0);
+    gl.uniform4f(
+      this.uCaptureRect,
+      this.captureRect.x,
+      this.captureRect.y,
+      this.captureRect.width,
+      this.captureRect.height
+    );
+    gl.uniform4f(
+      this.uEffect,
+      this.effectState.x,
+      this.effectState.y,
+      this.effectState.radius,
+      this.effectState.intensity
+    );
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
+    if (this.gpuFence) gl.deleteSync(this.gpuFence);
+    this.gpuFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    this.fenceCreatedAt = now;
+    gl.flush();
+    this.onEffectFrame?.({
+      x: this.effectState.x * viewportSize.width,
+      y: this.effectState.y * viewportSize.height,
+      radius: this.effectState.radius * viewportSize.height,
+      intensity: this.effectState.intensity,
+      width: viewportSize.width,
+      height: viewportSize.height,
+      depth: this.params.lensDepth
+    });
   }
   computeEffectBounds(nowSec, date, viewportWidth, viewportHeight) {
     const p = this.params;
@@ -1903,7 +1131,7 @@ var BlackHoleRenderer = class {
       );
       size = mix(0.22, 1, intensity);
       const diskOuter = Math.max(p.diskOuter, Math.max(p.diskInner, 1.6) + 0.5);
-      const ext = diskOuter / B_CRIT * holeRadius * size * SIZE_GAIN;
+      const ext = diskOuter / B_CRIT * holeRadius * size;
       const yLo = p.workArea + 0.12 + ext;
       const yHi = Math.max(yLo, 0.9 - ext);
       const speed = mix(0.35, 1, intensity);
@@ -1921,14 +1149,13 @@ var BlackHoleRenderer = class {
         y: center.y + intensity * (0.03 * Math.sin(t2 * 1.03 + 1))
       };
     } else {
-      const level = this.sizeMode === MODE_DEMO ? Math.min(positiveMod(nowSec, DEMO_SEC) / DEMO_GROW_SEC, 1) : this.glidedToken(nowSec);
-      if (level < 0)
-        return null;
+      const level = this.sizeMode === MODE_DEMO ? Math.min(positiveMod(Math.max(0, nowSec - this.demoStart), DEMO_SEC) / DEMO_GROW_SEC, 1) : this.glidedToken(nowSec);
+      if (level < 0) return null;
       const g = Math.pow(clamp(level, 0, 1), p.tokenEase);
       intensity = mix(0.1, 1, g);
       const rhMin = Math.sqrt(p.tokenAreaMin * aspect / Math.PI);
       const rhMax = Math.sqrt(p.tokenAreaMax * aspect / Math.PI);
-      const rhT = mix(rhMin, rhMax, g) * (holeRadius / 0.08) * SIZE_GAIN;
+      const rhT = mix(rhMin, rhMax, g) * (holeRadius / 0.08);
       size = rhT / holeRadius;
       const margin = Math.min(rhT * mix(1.45, 0.9, g), 0.5 * (1 - p.workArea - 0.03));
       const xPad = margin / aspect;
@@ -1956,7 +1183,7 @@ var BlackHoleRenderer = class {
         x: Math.max(room.x - wobble.x, 0),
         y: Math.max(room.y - wobble.y, 0)
       };
-      const t2 = nowSec * p.driftSpeed;
+      const t2 = (this.sizeMode === MODE_DEMO ? Math.max(0, nowSec - this.demoStart) : nowSec) * p.driftSpeed;
       const calm = lissa(t2 * p.tokenCalm);
       const rush = lissa(t2 * p.tokenRush);
       const wander = {
@@ -1969,9 +1196,9 @@ var BlackHoleRenderer = class {
       };
     }
     const shield = smoothstep(0, 0.1, intensity);
-    if (shield <= 0)
-      return null;
-    const rh = holeRadius * size * SIZE_GAIN;
+    if (shield <= 0) return null;
+    const rh = holeRadius * size;
+    this.effectState = { x: center.x, y: center.y, radius: rh, intensity };
     const effectRadius = Math.max(
       rh * 3,
       7 * rh * Math.sqrt(-Math.log(EFFECT_ALPHA_CUTOFF / Math.max(shield, EFFECT_ALPHA_CUTOFF)))
@@ -1982,68 +1209,73 @@ var BlackHoleRenderer = class {
     const x1 = clamp(Math.ceil((center.x + radiusX) * viewportWidth), 0, viewportWidth);
     const y0 = clamp(Math.floor((center.y - radiusY) * viewportHeight), 0, viewportHeight);
     const y1 = clamp(Math.ceil((center.y + radiusY) * viewportHeight), 0, viewportHeight);
-    if (x1 <= x0 || y1 <= y0)
-      return null;
+    if (x1 <= x0 || y1 <= y0) return null;
     return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
   }
   getViewportSize() {
     const parent = this.canvas.parentElement;
-    if (!parent)
-      return null;
-    const width = parent.clientWidth;
-    const height = parent.clientHeight;
-    if (width === 0 || height === 0)
-      return null;
+    if (!parent) return null;
+    const doc = this.canvas.ownerDocument;
+    const viewport = parent === doc?.body ? doc.defaultView : null;
+    const width = viewport?.innerWidth ?? parent.clientWidth;
+    const height = viewport?.innerHeight ?? parent.clientHeight;
+    if (width === 0 || height === 0) return null;
     return { width, height };
   }
   ensureViewportRect(bounds, viewportWidth, viewportHeight) {
-    const pad = VIEWPORT_PAD_PX;
-    const snap = VIEWPORT_SNAP_PX;
-    const x0 = clamp(Math.floor((bounds.x - pad) / snap) * snap, 0, viewportWidth);
-    const y0 = clamp(Math.floor((bounds.y - pad) / snap) * snap, 0, viewportHeight);
-    const x1 = clamp(Math.ceil((bounds.x + bounds.width + pad) / snap) * snap, 1, viewportWidth);
-    const y1 = clamp(Math.ceil((bounds.y + bounds.height + pad) / snap) * snap, 1, viewportHeight);
-    const next = {
-      x: x0,
-      y: y0,
-      width: Math.max(1, x1 - x0),
-      height: Math.max(1, y1 - y0)
-    };
     const prev = this.viewportRect;
-    if (!prev || prev.x !== next.x || prev.y !== next.y || prev.width !== next.width || prev.height !== next.height) {
-      this.viewportRect = next;
-      this.updateViewportRect(next);
-      return next;
-    }
-    return prev;
+    if (prev && prev.x <= bounds.x && prev.y <= bounds.y && prev.x + prev.width >= bounds.x + bounds.width && prev.y + prev.height >= bounds.y + bounds.height && prev.x + prev.width <= viewportWidth && prev.y + prev.height <= viewportHeight) return prev;
+    const width = Math.min(viewportWidth, Math.max(
+      prev?.width ?? 0,
+      Math.ceil((bounds.width + VIEWPORT_PAD_PX * 2) / VIEWPORT_SNAP_PX) * VIEWPORT_SNAP_PX
+    ));
+    const height = Math.min(viewportHeight, Math.max(
+      prev?.height ?? 0,
+      Math.ceil((bounds.height + VIEWPORT_PAD_PX * 2) / VIEWPORT_SNAP_PX) * VIEWPORT_SNAP_PX
+    ));
+    const next = {
+      x: clamp(Math.floor(bounds.x + bounds.width / 2 - width / 2), 0, viewportWidth - width),
+      y: clamp(Math.floor(bounds.y + bounds.height / 2 - height / 2), 0, viewportHeight - height),
+      width,
+      height
+    };
+    this.viewportRect = next;
+    return next;
   }
   updateViewportRect(rect) {
-    if (!this.gl)
-      return;
-    const renderScale = Math.max(this.minRenderScale, Math.min(1, this.renderScale));
-    const backingWidth = Math.max(1, Math.round(rect.width * renderScale));
-    const backingHeight = Math.max(1, Math.round(rect.height * renderScale));
+    if (!this.gl) return;
+    const rawDpr = this.canvas.ownerDocument?.defaultView?.devicePixelRatio ?? 1;
+    const dpr = Number.isFinite(rawDpr) ? clamp(rawDpr, 1, MAX_DEVICE_PIXEL_RATIO) : 1;
+    const requestedScale = clamp(this.renderScale, this.minRenderScale, 1) * dpr;
+    const renderScale = Math.min(
+      requestedScale,
+      Math.sqrt(MAX_RENDER_PIXELS / (rect.width * rect.height)),
+      MAX_RENDER_DIMENSION / rect.width,
+      MAX_RENDER_DIMENSION / rect.height
+    ) * this.qualityFactor;
+    const backingWidth = Math.max(1, Math.floor(rect.width * renderScale));
+    const backingHeight = Math.max(1, Math.floor(rect.height * renderScale));
     if (this.canvas.width !== backingWidth || this.canvas.height !== backingHeight) {
       this.canvas.width = backingWidth;
       this.canvas.height = backingHeight;
       this.gl.viewport(0, 0, backingWidth, backingHeight);
     }
+    rect.x = Math.round(rect.x * backingWidth / rect.width) * rect.width / backingWidth;
+    rect.y = Math.round(rect.y * backingHeight / rect.height) * rect.height / backingHeight;
+    this.canvas.style.visibility = "visible";
     this.canvas.style.width = `${rect.width}px`;
     this.canvas.style.height = `${rect.height}px`;
     this.canvas.style.transform = `translate3d(${rect.x}px, ${rect.y}px, 0)`;
   }
   hideCanvas() {
     this.viewportRect = null;
-    this.canvas.style.width = "0px";
-    this.canvas.style.height = "0px";
+    this.canvas.style.visibility = "hidden";
+    this.onEffectFrame?.(null);
   }
-  glidedToken(nowSec) {
-    const cur = this.tokenLevel;
+  glidedToken(nowSec, cur = this.tokenLevel) {
     const prev = this.prevTokenLevel;
-    if (cur < 0)
-      return -1;
-    if (prev < 0)
-      return cur;
+    if (cur < 0) return -1;
+    if (prev < 0) return cur;
     const duration = clamp(
       Math.abs(cur - prev) * this.params.tokenGlideRate,
       this.params.tokenGlideMin,
@@ -2053,144 +1285,183 @@ var BlackHoleRenderer = class {
   }
 };
 
-// src/capture.ts
-var domToImage = __toESM(require_dom_to_image_more_min());
-var DEFAULT_INTERVAL = 1500;
-var MAX_INTERVAL = 4e3;
-var DEFAULT_SCALE = 0.25;
-var SLOW_BACKOFF = 3;
-var MAX_CONSECUTIVE_FAILURES = 5;
-var WorkspaceCapture = class {
-  constructor() {
-    this.lastCapture = 0;
-    this.el = null;
-    this.failed = false;
-    this.failures = 0;
-    this.inFlight = false;
-    // don't overlap captures
-    this.baseInterval = DEFAULT_INTERVAL;
-    this.currentInterval = DEFAULT_INTERVAL;
-    this.scale = DEFAULT_SCALE;
-    this.enabled = true;
-    this.onCapture = null;
-    /** The most recent successfully captured canvas. */
-    this.latestCanvas = null;
-    /** Time of the latest successful capture (monotonic). */
-    this.latestCaptureTime = 0;
+// src/backdrop.ts
+var SVG_NS = "http://www.w3.org/2000/svg";
+var MAP_SIZE = 128;
+var MAX_FILTER_PIXELS = 1048576;
+var nextId = 0;
+function displacementMap(size = MAP_SIZE) {
+  const data = new Uint8ClampedArray(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const nx = (x + 0.5) / size * 2 - 1, ny = (y + 0.5) / size * 2 - 1;
+    const r2 = nx * nx + ny * ny;
+    const weight = r2 < 1 ? (1 - r2) ** 2 : 0;
+    const i = (y * size + x) * 4;
+    data[i] = Math.round(128 - 127 * nx * weight);
+    data[i + 1] = Math.round(128 - 127 * ny * weight);
+    data[i + 2] = 128;
+    data[i + 3] = 255;
   }
-  setElement(el) {
-    this.el = el;
-  }
-  /** Tune cadence / resolution / on-off from settings. */
-  setOptions(opts) {
-    if (opts.enabled !== void 0) {
-      const wasEnabled = this.enabled;
-      this.enabled = opts.enabled;
-      if (!wasEnabled && this.enabled)
-        this.reset();
+  return data;
+}
+function lensGeometry(frame, note, dpr) {
+  if (![
+    frame.x,
+    frame.y,
+    frame.radius,
+    frame.intensity,
+    frame.depth,
+    note.left,
+    note.top,
+    note.right,
+    note.bottom
+  ].every(Number.isFinite)) return null;
+  if (frame.radius <= 0 || frame.intensity <= 0 || frame.depth <= 0) return null;
+  if (frame.x <= note.left + 2 || frame.x >= note.right - 2 || frame.y <= note.top + 2 || frame.y >= note.bottom - 2) return null;
+  const pixelRatio = Number.isFinite(dpr) ? Math.max(1, dpr) : 1;
+  const radius = Math.min(frame.radius * 6, Math.sqrt(MAX_FILTER_PIXELS) / (2 * pixelRatio));
+  if (radius < 2) return null;
+  const left = Math.max(note.left + 1, frame.x - radius);
+  const top = Math.max(note.top + 1, frame.y - radius);
+  const right = Math.min(note.right - 1, frame.x + radius);
+  const bottom = Math.min(note.bottom - 1, frame.y + radius);
+  if (right <= left || bottom <= top) return null;
+  return {
+    left,
+    top,
+    width: right - left,
+    height: bottom - top,
+    mapX: frame.x - radius - left,
+    mapY: frame.y - radius - top,
+    diameter: radius * 2,
+    scale: radius * Math.min(1.6, frame.depth / 13 * 0.9) * Math.min(1, frame.intensity / 0.1)
+  };
+}
+var BackdropLens = class {
+  constructor(host) {
+    this.host = host;
+    this.target = null;
+    this.suspended = true;
+    this.enabled = false;
+    this.disposed = false;
+    this.lastFrame = null;
+    this.geometryKey = "";
+    const doc = host.ownerDocument;
+    this.supported = !!doc.defaultView?.CSS?.supports("backdrop-filter", "url(#blackhole-probe)");
+    const make = (tag) => doc.createElementNS(SVG_NS, tag);
+    this.layer = doc.createElement("div");
+    this.layer.className = "blackhole-backdrop";
+    this.layer.setAttribute("aria-hidden", "true");
+    this.layer.style.display = "none";
+    this.svg = make("svg");
+    this.svg.setAttribute("width", "0");
+    this.svg.setAttribute("height", "0");
+    this.svg.style.position = "absolute";
+    this.svg.setAttribute("aria-hidden", "true");
+    this.svg.classList.add("blackhole-filter-defs");
+    this.filter = make("filter");
+    this.filter.id = `blackhole-lens-${++nextId}`;
+    this.filter.setAttribute("filterUnits", "userSpaceOnUse");
+    this.filter.setAttribute("primitiveUnits", "userSpaceOnUse");
+    this.filter.setAttribute("color-interpolation-filters", "sRGB");
+    this.filter.setAttribute("x", "0");
+    this.filter.setAttribute("y", "0");
+    this.image = make("feImage");
+    this.image.setAttribute("result", "encoded-map");
+    this.image.setAttribute("preserveAspectRatio", "none");
+    const transfer = make("feComponentTransfer");
+    transfer.setAttribute("in", "encoded-map");
+    transfer.setAttribute("result", "map");
+    for (const tag of ["feFuncR", "feFuncG"]) {
+      const fn = make(tag);
+      fn.setAttribute("type", "linear");
+      fn.setAttribute("slope", String(255 / 254));
+      fn.setAttribute("intercept", String(-1 / 254));
+      transfer.appendChild(fn);
     }
-    if (opts.intervalMs !== void 0) {
-      this.baseInterval = Math.max(100, opts.intervalMs);
-      this.currentInterval = Math.max(this.currentInterval, this.baseInterval);
-    }
-    if (opts.scale !== void 0)
-      this.scale = Math.max(0.1, Math.min(1, opts.scale));
-  }
-  /**
-   * Trigger an async capture. Returns `true` if a capture was initiated.
-   * Resolves by updating `latestCanvas` when dom-to-image finishes.
-   * Rate-limited and self-throttling.
-   */
-  capture(now) {
-    if (!this.enabled || this.failed || !this.el || this.inFlight)
-      return false;
-    if (now - this.lastCapture < this.currentInterval)
-      return false;
-    const el = this.el;
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    if (w === 0 || h === 0)
-      return false;
-    this.lastCapture = now;
-    const started = performance.now();
-    this.inFlight = true;
-    try {
-      const options = {
-        width: w,
-        height: h,
-        scale: this.scale,
-        // CRITICAL: do not let dom-to-image fetch fonts or images. In Obsidian
-        // those resolve to `app://` URLs served by the *main process* protocol
-        // handler, which decodeURIComponent()s the path and throws an uncaught
-        // "URI malformed" — crashing the whole app. A renderer try/catch can't
-        // catch a main-process throw, so we must avoid issuing the request.
-        // The lensed texture only needs the workspace text/layout, not media.
-        disableEmbedFonts: true,
-        disableInlineImages: true,
-        // reading cross-origin stylesheet cssRules can also throw synchronously
-        ignoreCSSRuleErrors: true,
-        // Faster, slightly less exact cache keys for computed styles.
-        styleCaching: "relaxed",
-        // belt-and-suspenders: block any remaining non-data URL from being fetched
-        filterUrls: (url) => url.startsWith("data:"),
-        filter: (n) => {
-          if (n instanceof HTMLElement && n.classList.contains("blackhole-canvas"))
-            return false;
-          return true;
-        }
-      };
-      domToImage.toCanvas(el, options).then((canvas) => {
-        this.latestCanvas = canvas;
-        this.latestCaptureTime = performance.now();
-        this.failures = 0;
-        this.adjustInterval(performance.now() - started);
-        this.onCapture?.(canvas, this.latestCaptureTime);
-      }).catch((e) => {
-        this.noteFailure(e);
-      }).then(() => {
-        this.inFlight = false;
-      });
-    } catch (e) {
-      this.inFlight = false;
-      this.noteFailure(e);
-      return false;
-    }
-    return true;
-  }
-  /** Widen the interval when a capture is expensive so we never spend more
-   *  time blocking the main thread than the budget allows. */
-  adjustInterval(durationMs) {
-    this.currentInterval = Math.min(
-      MAX_INTERVAL,
-      Math.max(this.baseInterval, Math.round(durationMs * SLOW_BACKOFF))
-    );
-  }
-  noteFailure(e) {
-    this.failures++;
-    if (this.failures >= MAX_CONSECUTIVE_FAILURES) {
-      this.failed = true;
-      console.error(
-        `BlackHole: workspace capture failed ${this.failures}\xD7 \u2014 disabling capture; the shader will render disk/starfield only.`,
-        e
-      );
+    this.displacement = make("feDisplacementMap");
+    this.displacement.setAttribute("in", "SourceGraphic");
+    this.displacement.setAttribute("in2", "map");
+    this.displacement.setAttribute("xChannelSelector", "R");
+    this.displacement.setAttribute("yChannelSelector", "G");
+    this.filter.append(this.image, transfer, this.displacement);
+    this.svg.appendChild(this.filter);
+    if (this.supported) {
+      const canvas = doc.createElement("canvas");
+      canvas.width = canvas.height = MAP_SIZE;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Unable to create lens displacement map");
+      const pixels = ctx.createImageData(MAP_SIZE, MAP_SIZE);
+      pixels.data.set(displacementMap());
+      ctx.putImageData(pixels, 0, 0);
+      this.image.setAttribute("href", canvas.toDataURL("image/png"));
+      this.layer.style.backdropFilter = `url(#${this.filter.id})`;
+      host.append(this.svg, this.layer);
     }
   }
-  /** Reset failure/backoff state (e.g. after a mode change). */
-  reset() {
-    this.failed = false;
-    this.failures = 0;
-    this.currentInterval = this.baseInterval;
+  setTarget(target) {
+    this.target = target?.ownerDocument === this.host.ownerDocument ? target : null;
+    this.hide();
   }
-  /** Force the next poll to capture immediately (e.g. content changed). */
-  requestSoon() {
-    this.lastCapture = 0;
+  setEnabled(enabled) {
+    this.enabled = enabled;
+    if (!enabled) this.hide();
   }
-  /** A transparent placeholder canvas to seed the texture before first capture. */
-  static blankCanvas(w, h) {
-    const c = document.createElement("canvas");
-    c.width = Math.max(1, Math.round(w * DEFAULT_SCALE));
-    c.height = Math.max(1, Math.round(h * DEFAULT_SCALE));
-    return c;
+  setSuspended(suspended) {
+    this.suspended = suspended;
+    if (suspended) this.hide();
+  }
+  hide() {
+    this.layer.style.display = "none";
+  }
+  update(frame) {
+    this.lastFrame = frame;
+    if (this.disposed || !this.supported || !this.enabled || this.suspended || !frame || !this.target?.isConnected || this.target.getClientRects().length === 0) {
+      this.hide();
+      return;
+    }
+    const view = this.host.ownerDocument.defaultView;
+    const rect = this.target.getBoundingClientRect();
+    const note = {
+      left: Math.max(0, rect.left),
+      top: Math.max(0, rect.top),
+      right: Math.min(view.innerWidth, rect.right),
+      bottom: Math.min(view.innerHeight, rect.bottom)
+    };
+    const geometry = lensGeometry(frame, note, view.devicePixelRatio);
+    if (!geometry) {
+      this.hide();
+      return;
+    }
+    const g = geometry;
+    const key = [g.left, g.top, g.width, g.height, g.mapX, g.mapY, g.diameter, g.scale].join(",");
+    if (key === this.geometryKey) {
+      this.layer.style.display = "block";
+      return;
+    }
+    this.geometryKey = key;
+    this.layer.style.left = `${g.left}px`;
+    this.layer.style.top = `${g.top}px`;
+    this.layer.style.width = `${g.width}px`;
+    this.layer.style.height = `${g.height}px`;
+    this.filter.setAttribute("width", String(g.width));
+    this.filter.setAttribute("height", String(g.height));
+    this.image.setAttribute("x", String(g.mapX));
+    this.image.setAttribute("y", String(g.mapY));
+    this.image.setAttribute("width", String(g.diameter));
+    this.image.setAttribute("height", String(g.diameter));
+    this.displacement.setAttribute("scale", String(g.scale));
+    this.layer.style.display = "block";
+  }
+  refresh() {
+    this.update(this.lastFrame);
+  }
+  destroy() {
+    this.disposed = true;
+    this.target = null;
+    this.lastFrame = null;
+    this.layer.remove();
+    this.svg.remove();
   }
 };
 
@@ -2202,37 +1473,45 @@ var translations = {
     "notice.disabled": "Black hole OFF",
     "notice.startFailed": "Black Hole failed to start \u2014 see console for details.",
     "notice.requireWebgl2": "Black Hole plugin requires WebGL2",
-    "notice.softwareReduced": "Black Hole: no GPU acceleration detected \u2014 quality reduced hard for usability. Tune it under Settings \u2192 Performance.",
+    "notice.softwareUnsupported": "Hardware acceleration required. Animation stopped.",
+    "notice.lensUnsupported": "Live text lens is not supported here.",
+    "notice.captureComplex": "Legacy capture: note exceeds the limit.",
+    "notice.captureLayout": "Legacy capture: layout stayed busy.",
+    "notice.captureSlow": "Legacy capture: time limit exceeded.",
+    "notice.captureFailed": "Legacy capture: repeated failure.",
+    "settings.reset.name": "Reset settings",
+    "settings.reset.desc": "Reset animation settings.",
+    "settings.reset.button": "Reset",
     "settings.title": "Black Hole Settings",
     "settings.general": "General",
     "settings.language.name": "Language",
-    "settings.language.desc": "UI language for this plugin",
+    "settings.language.desc": "",
     "settings.language.auto": "Auto",
     "settings.language.en": "English",
     "settings.language.zh-CN": "Simplified Chinese",
     "settings.playback": "Playback",
     "settings.idleOnly.name": "Idle-Only Playback",
-    "settings.idleOnly.desc": "Only play the black hole after you have been idle for the configured delay. Any new activity stops it immediately.",
+    "settings.idleOnly.desc": "Pause when you resume typing or scrolling.",
     "settings.idleDelay.name": "Idle Start Delay (sec)",
-    "settings.idleDelay.desc": "How long you must stay inactive before the animation starts",
+    "settings.idleDelay.desc": "Wait this long after your last input.",
     "settings.mode.name": "Size Mode",
-    "settings.mode.desc": "What drives the hole's growth",
-    "settings.mode.pomodoro": "Pomodoro \u2014 wall-clock work/break cycle",
-    "settings.mode.token": "Token \u2014 word count / custom metric",
-    "settings.mode.demo": "Demo \u2014 self-running showcase loop",
+    "settings.mode.desc": "Choose how the black hole grows.",
+    "settings.mode.pomodoro": "Pomodoro",
+    "settings.mode.token": "Word count",
+    "settings.mode.demo": "Demo (42-second loop)",
     "settings.tokenMetric.name": "Token Metric",
-    "settings.tokenMetric.desc": "What drives the hole in token mode",
+    "settings.tokenMetric.desc": "Controls size in Word count mode.",
     "settings.tokenMetric.word": "Current note word count",
-    "settings.tokenMetric.global": "Vault-wide word count",
+    "settings.tokenMetric.global": "Estimated vault word count (500 per Markdown file)",
     "settings.tokenMetric.file": "Vault file count",
     "settings.tokenMetric.tab": "Open tab count",
     "settings.maxWordCount.name": "Max Word Count",
-    "settings.maxWordCount.desc": "Word count at which the hole reaches 100% size (token mode)",
+    "settings.maxWordCount.desc": "Word count for full size.",
     "settings.section.pomodoro": "Pomodoro",
     "settings.workPeriod.name": "Work Period (min)",
     "settings.break.name": "Break (min)",
     "settings.idleFade.name": "Idle Fade (sec)",
-    "settings.idleFade.desc": "Typing pause after which the hole starts to shrink",
+    "settings.idleFade.desc": "Start shrinking after this idle time.",
     "settings.section.hole": "Hole & Lensing",
     "settings.holeRadius.name": "Hole Radius",
     "settings.lensDepth.name": "Lens Depth",
@@ -2249,13 +1528,11 @@ var translations = {
     "settings.diskBeam.name": "Beaming",
     "settings.section.performance": "Performance",
     "settings.nSteps.name": "Integration Steps",
-    "settings.nSteps.desc": "Geodesic steps per pixel \u2014 higher = more accurate but slower",
-    "settings.renderScale.name": "Render Scale",
-    "settings.renderScale.desc": "Resolution the shader renders at. Lower is much faster on weak or software GPUs.",
-    "settings.captureEnabled.name": "Capture Workspace",
-    "settings.captureEnabled.desc": "Warp your actual notes into the lens. Turn OFF if the UI stutters \u2014 the hole then lenses the starfield only.",
-    "settings.captureInterval.name": "Capture Interval (ms)",
-    "settings.captureInterval.desc": "How often the workspace is re-captured. Higher = smoother UI, less responsive lensing.",
+    "settings.nSteps.desc": "Higher is more accurate, but slower.",
+    "settings.renderScale.name": "Resolution",
+    "settings.renderScale.desc": "Higher is sharper and uses more GPU.",
+    "settings.captureEnabled.name": "Text lens",
+    "settings.captureEnabled.desc": "Live SVG backdrop lens. No screenshots; uses GPU.",
     "settings.tokenAreaMax.name": "Token Area Max (\xD71e-3)"
   },
   "zh-CN": {
@@ -2264,37 +1541,45 @@ var translations = {
     "notice.disabled": "\u9ED1\u6D1E\u5DF2\u5173\u95ED",
     "notice.startFailed": "\u9ED1\u6D1E\u63D2\u4EF6\u542F\u52A8\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u63A7\u5236\u53F0\u65E5\u5FD7\u3002",
     "notice.requireWebgl2": "\u9ED1\u6D1E\u63D2\u4EF6\u9700\u8981 WebGL2 \u624D\u80FD\u8FD0\u884C",
-    "notice.softwareReduced": "\u68C0\u6D4B\u5230\u672A\u4F7F\u7528 GPU \u52A0\u901F\uFF0C\u5DF2\u5F3A\u5236\u964D\u4F4E\u8D28\u91CF\u4EE5\u4FDD\u8BC1\u53EF\u7528\u6027\u3002\u53EF\u5728\u8BBE\u7F6E \u2192 \u6027\u80FD\u4E2D\u7EE7\u7EED\u8C03\u6574\u3002",
+    "notice.softwareUnsupported": "\u9700\u8981\u786C\u4EF6\u52A0\u901F\uFF0C\u52A8\u753B\u5DF2\u505C\u6B62\u3002",
+    "notice.lensUnsupported": "\u5F53\u524D\u73AF\u5883\u4E0D\u652F\u6301\u5B9E\u65F6\u6587\u5B57\u900F\u955C\u3002",
+    "notice.captureComplex": "\u65E7\u7248\u622A\u56FE\u8BCA\u65AD\uFF1A\u7B14\u8BB0\u8D85\u51FA\u5BB9\u91CF\u3002",
+    "notice.captureLayout": "\u65E7\u7248\u622A\u56FE\u8BCA\u65AD\uFF1A\u5E03\u5C40\u4ECD\u7E41\u5FD9\u3002",
+    "notice.captureSlow": "\u65E7\u7248\u622A\u56FE\u8BCA\u65AD\uFF1A\u8017\u65F6\u8D85\u9650\u3002",
+    "notice.captureFailed": "\u65E7\u7248\u622A\u56FE\u8BCA\u65AD\uFF1A\u8FDE\u7EED\u5931\u8D25\u3002",
+    "settings.reset.name": "\u6062\u590D\u9ED8\u8BA4",
+    "settings.reset.desc": "\u91CD\u7F6E\u52A8\u753B\u53C2\u6570\u3002",
+    "settings.reset.button": "\u6062\u590D\u9ED8\u8BA4",
     "settings.title": "\u9ED1\u6D1E\u8BBE\u7F6E",
     "settings.general": "\u901A\u7528",
     "settings.language.name": "\u8BED\u8A00",
-    "settings.language.desc": "\u6B64\u63D2\u4EF6\u7684\u754C\u9762\u8BED\u8A00",
+    "settings.language.desc": "",
     "settings.language.auto": "\u81EA\u52A8",
     "settings.language.en": "\u82F1\u6587",
     "settings.language.zh-CN": "\u7B80\u4F53\u4E2D\u6587",
     "settings.playback": "\u64AD\u653E\u63A7\u5236",
     "settings.idleOnly.name": "\u4EC5\u5728\u95F2\u7F6E\u65F6\u64AD\u653E",
-    "settings.idleOnly.desc": "\u53EA\u6709\u5728\u4F60\u505C\u6B62\u64CD\u4F5C\u8FBE\u5230\u8BBE\u5B9A\u65F6\u957F\u540E\u624D\u64AD\u653E\u9ED1\u6D1E\u52A8\u753B\uFF0C\u4E00\u65E6\u91CD\u65B0\u64CD\u4F5C\u5C31\u7ACB\u5373\u505C\u6B62\u3002",
+    "settings.idleOnly.desc": "\u8F93\u5165\u6216\u6EDA\u52A8\u65F6\u6682\u505C\u3002",
     "settings.idleDelay.name": "\u95F2\u7F6E\u542F\u52A8\u5EF6\u65F6\uFF08\u79D2\uFF09",
-    "settings.idleDelay.desc": "\u9700\u8981\u4FDD\u6301\u65E0\u64CD\u4F5C\u591A\u4E45\u540E\u624D\u5F00\u59CB\u64AD\u653E\u52A8\u753B",
+    "settings.idleDelay.desc": "\u505C\u6B62\u64CD\u4F5C\u540E\u7B49\u5F85\u7684\u65F6\u95F4\u3002",
     "settings.mode.name": "\u5C3A\u5BF8\u6A21\u5F0F",
-    "settings.mode.desc": "\u51B3\u5B9A\u9ED1\u6D1E\u589E\u957F\u65B9\u5F0F",
-    "settings.mode.pomodoro": "\u756A\u8304\u949F\uFF1A\u6309\u5DE5\u4F5C / \u4F11\u606F\u65F6\u95F4\u5FAA\u73AF\u53D8\u5316",
-    "settings.mode.token": "\u5B57\u6570\uFF1A\u6309\u5B57\u6570 / \u6307\u6807\u53D8\u5316",
-    "settings.mode.demo": "\u6F14\u793A\uFF1A\u81EA\u52A8\u5C55\u793A\u6548\u679C",
+    "settings.mode.desc": "\u9009\u62E9\u9ED1\u6D1E\u7684\u589E\u957F\u65B9\u5F0F\u3002",
+    "settings.mode.pomodoro": "\u756A\u8304\u949F",
+    "settings.mode.token": "\u5B57\u6570",
+    "settings.mode.demo": "\u6F14\u793A\uFF0842 \u79D2\u5FAA\u73AF\uFF09",
     "settings.tokenMetric.name": "\u5B57\u6570\u6307\u6807",
-    "settings.tokenMetric.desc": "\u5B57\u6570\u6A21\u5F0F\u4E0B\u7528\u4E8E\u9A71\u52A8\u9ED1\u6D1E\u7684\u6307\u6807",
+    "settings.tokenMetric.desc": "\u5B57\u6570\u6A21\u5F0F\u4E0B\u7684\u5927\u5C0F\u4F9D\u636E\u3002",
     "settings.tokenMetric.word": "\u5F53\u524D\u7B14\u8BB0\u5B57\u6570",
     "settings.tokenMetric.global": "\u6574\u4E2A\u4ED3\u5E93\u4F30\u7B97\u5B57\u6570",
     "settings.tokenMetric.file": "\u4ED3\u5E93\u6587\u4EF6\u6570",
     "settings.tokenMetric.tab": "\u5DF2\u6253\u5F00\u6807\u7B7E\u6570",
     "settings.maxWordCount.name": "\u6700\u5927\u5B57\u6570",
-    "settings.maxWordCount.desc": "\u8FBE\u5230\u8BE5\u5B57\u6570\u65F6\u9ED1\u6D1E\u589E\u957F\u5230 100%\uFF08\u5B57\u6570\u6A21\u5F0F\uFF09",
+    "settings.maxWordCount.desc": "\u8FBE\u5230\u6B64\u5B57\u6570\u65F6\u6700\u5927\u3002",
     "settings.section.pomodoro": "\u756A\u8304\u949F",
     "settings.workPeriod.name": "\u5DE5\u4F5C\u65F6\u957F\uFF08\u5206\u949F\uFF09",
     "settings.break.name": "\u4F11\u606F\u65F6\u957F\uFF08\u5206\u949F\uFF09",
     "settings.idleFade.name": "\u7A7A\u95F2\u6DE1\u51FA\uFF08\u79D2\uFF09",
-    "settings.idleFade.desc": "\u5728\u756A\u8304\u949F\u6A21\u5F0F\u4E0B\uFF0C\u505C\u6B62\u8F93\u5165\u591A\u4E45\u540E\u9ED1\u6D1E\u5F00\u59CB\u7F29\u5C0F",
+    "settings.idleFade.desc": "\u95F2\u7F6E\u591A\u4E45\u540E\u5F00\u59CB\u7F29\u5C0F\u3002",
     "settings.section.hole": "\u9ED1\u6D1E\u4E0E\u5F15\u529B\u900F\u955C",
     "settings.holeRadius.name": "\u9ED1\u6D1E\u534A\u5F84",
     "settings.lensDepth.name": "\u900F\u955C\u6DF1\u5EA6",
@@ -2311,19 +1596,16 @@ var translations = {
     "settings.diskBeam.name": "\u675F\u5C04\u5F3A\u5EA6",
     "settings.section.performance": "\u6027\u80FD",
     "settings.nSteps.name": "\u79EF\u5206\u6B65\u6570",
-    "settings.nSteps.desc": "\u6BCF\u50CF\u7D20\u7684\u6D4B\u5730\u7EBF\u79EF\u5206\u6B65\u6570\uFF0C\u8D8A\u9AD8\u8D8A\u7CBE\u786E\u4F46\u8D8A\u6162",
-    "settings.renderScale.name": "\u6E32\u67D3\u7F29\u653E",
-    "settings.renderScale.desc": "\u7740\u8272\u5668\u5B9E\u9645\u6E32\u67D3\u5206\u8FA8\u7387\u3002\u8D8A\u4F4E\u8D8A\u5FEB\uFF0C\u5C24\u5176\u9002\u5408\u5F31 GPU \u6216\u8F6F\u4EF6\u6E32\u67D3\u3002",
-    "settings.captureEnabled.name": "\u6355\u83B7\u5DE5\u4F5C\u533A",
-    "settings.captureEnabled.desc": "\u628A\u771F\u5B9E\u7B14\u8BB0\u5185\u5BB9\u626D\u66F2\u8FDB\u900F\u955C\u4E2D\u3002\u5982\u679C\u754C\u9762\u5361\u987F\u8BF7\u5173\u95ED\uFF0C\u6B64\u65F6\u53EA\u6E32\u67D3\u661F\u573A\u3002",
-    "settings.captureInterval.name": "\u6355\u83B7\u95F4\u9694\uFF08\u6BEB\u79D2\uFF09",
-    "settings.captureInterval.desc": "\u91CD\u65B0\u6355\u83B7\u5DE5\u4F5C\u533A\u7684\u9891\u7387\u3002\u8D8A\u9AD8\u8D8A\u6D41\u7545\uFF0C\u4F46\u900F\u955C\u54CD\u5E94\u8D8A\u6162\u3002",
+    "settings.nSteps.desc": "\u8D8A\u9AD8\u8D8A\u7CBE\u786E\uFF0C\u4E5F\u8D8A\u6162\u3002",
+    "settings.renderScale.name": "\u5206\u8FA8\u7387",
+    "settings.renderScale.desc": "\u8D8A\u9AD8\u8D8A\u6E05\u6670\uFF0C\u4E5F\u66F4\u5360 GPU\u3002",
+    "settings.captureEnabled.name": "\u6587\u5B57\u626D\u66F2",
+    "settings.captureEnabled.desc": "SVG \u5B9E\u65F6\u80CC\u666F\u900F\u955C\u3002\u4E0D\u622A\u56FE\uFF0C\u5360\u7528 GPU\u3002",
     "settings.tokenAreaMax.name": "\u5B57\u6570\u6A21\u5F0F\u6700\u5927\u9762\u79EF\uFF08\xD71e-3\uFF09"
   }
 };
 function resolveLocale(language) {
-  if (language === "en" || language === "zh-CN")
-    return language;
+  if (language === "en" || language === "zh-CN") return language;
   const detected = (typeof navigator !== "undefined" ? navigator.language : "en").toLowerCase();
   return detected.startsWith("zh") ? "zh-CN" : "en";
 }
@@ -2332,232 +1614,368 @@ function t(language, key) {
   return translations[locale][key] ?? translations.en[key];
 }
 
+// src/metrics.ts
+var CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+var WORD = /[\p{L}\p{N}_]/u;
+var MARK = /\p{M}/u;
+function countWords(text) {
+  let count = 0;
+  let inWord = false;
+  for (const char of text) {
+    if (CJK.test(char)) {
+      count++;
+      inWord = false;
+    } else if (WORD.test(char)) {
+      if (!inWord) count++;
+      inWord = true;
+    } else if (!(inWord && (MARK.test(char) || char === "'" || char === "\u2019"))) {
+      inWord = false;
+    }
+  }
+  return count;
+}
+var MetricCache = class {
+  constructor(source, throttleMs = 1e3) {
+    this.source = source;
+    this.throttleMs = throttleMs;
+    this.values = /* @__PURE__ */ new Map();
+    this.dirty = /* @__PURE__ */ new Set();
+    this.lastRead = /* @__PURE__ */ new Map();
+  }
+  invalidate(...metrics) {
+    for (const metric of metrics) this.dirty.add(metric);
+  }
+  clear() {
+    this.values.clear();
+    this.dirty.clear();
+    this.lastRead.clear();
+  }
+  level(settings, now) {
+    if (settings.sizeMode !== 1) return -1;
+    const metric = settings.tokenMetric;
+    if (!this.values.has(metric) || this.dirty.has(metric) && now - (this.lastRead.get(metric) ?? -Infinity) >= this.throttleMs) {
+      let count2;
+      switch (metric) {
+        case "word-count": {
+          const text = this.source.currentText();
+          count2 = text === null ? -1 : countWords(text);
+          break;
+        }
+        // Kept as an explicitly labelled estimate, not a vault-wide text scan.
+        case "global-word-count":
+          count2 = this.source.markdownFileCount() * 500;
+          break;
+        case "file-count":
+          count2 = this.source.markdownFileCount();
+          break;
+        case "tab-count":
+          count2 = this.source.markdownTabCount();
+          break;
+      }
+      this.values.set(metric, count2);
+      this.lastRead.set(metric, now);
+      this.dirty.delete(metric);
+    }
+    const count = this.values.get(metric);
+    if (count < 0) return -1;
+    const max = metric === "file-count" ? 1e3 : metric === "tab-count" ? 20 : settings.maxWordCount;
+    return Math.min(count / max, 1);
+  }
+};
+
 // src/main.ts
-var MAX_RENDER_SCALE = 0.35;
-var MAX_RENDER_SCALE_SOFTWARE = 0.22;
-var MAX_SHADER_STEPS = 10;
-var MAX_HOLE_RADIUS = 0.014;
-var MAX_TOKEN_AREA_MIN = 3e-3;
-var MAX_TOKEN_AREA_MAX = 0.02;
-var MAX_DISK_OUTER = 7;
 var BlackHolePlugin = class extends import_obsidian2.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT_SETTINGS };
     this.renderer = null;
-    this.capture = null;
+    this.lens = null;
+    this.lensUnsupportedNotified = false;
     this.canvas = null;
-    this.enabled = true;
+    this.unloaded = false;
+    this.layoutReady = false;
+    this.runtimeBlocked = false;
+    this.generation = 0;
+    this.ready = false;
+    this.compiling = false;
+    this.paramsVersion = 0;
     this.lastActivity = 0;
-    this.captureIntervalId = 0;
+    this.playbackSuspended = true;
     this.metricIntervalId = 0;
-    this.leafChangeRef = null;
-    this.layoutChangeRef = null;
     this.idleResumeTimeoutId = 0;
-    this.playbackSuspended = false;
-    this.recompileSoon = (0, import_obsidian2.debounce)(() => {
-      if (this.renderer)
-        this.renderer.recompile(this.toShaderParams());
-    }, 200, true);
-    // Re-capture once scrolling settles (trailing debounce) rather than on every
-    // scroll event — keeps the snapshot current without thrashing dom-to-image.
-    this.requestCaptureSoon = (0, import_obsidian2.debounce)(() => {
-      this.capture?.requestSoon();
-    }, 250, true);
-    this.scrollHandler = () => {
-      this.requestCaptureSoon();
-    };
+    this.recompileTimeoutId = 0;
+    this.metrics = new MetricCache({
+      currentText: () => this.app.workspace.getActiveViewOfType(import_obsidian2.MarkdownView)?.editor?.getValue() ?? null,
+      markdownFileCount: () => this.app.vault.getMarkdownFiles().length,
+      markdownTabCount: () => this.app.workspace.getLeavesOfType("markdown").length
+    });
     this.activityHandler = () => {
+      if (this.unloaded) return;
       this.lastActivity = performance.now();
-      if (this.renderer)
-        this.renderer.lastActivity = this.lastActivity / 1e3;
-      if (this.settings.idlePlaybackEnabled) {
-        this.setPlaybackSuspended(true);
-        this.scheduleIdleResume();
-      }
+      if (this.renderer) this.renderer.lastActivity = this.lastActivity / 1e3;
+      this.syncPlaybackGate();
+    };
+    this.visibilityHandler = () => {
+      if (!document.hidden) this.lastActivity = performance.now();
+      if (this.renderer) this.renderer.lastActivity = this.lastActivity / 1e3;
+      this.syncPlaybackGate();
+    };
+    this.refreshTarget = () => {
+      if (this.unloaded) return;
+      this.metrics.invalidate("word-count", "tab-count");
+      this.lens?.setTarget(this.findLensTarget());
+      this.lens?.refresh();
     };
   }
   async onload() {
     await this.loadSettings();
+    if (this.unloaded) return;
+    this.lastActivity = performance.now();
     this.addSettingTab(new BlackHoleSettingsTab(this.app, this));
     this.addRibbonIcon("circle-dot", this.t("ribbon.toggle"), () => {
-      this.enabled = !this.enabled;
-      if (this.enabled)
-        this.start();
-      else
-        this.stop();
-      new import_obsidian2.Notice(this.enabled ? this.t("notice.enabled") : this.t("notice.disabled"));
+      void this.setEnabled(!this.settings.enabled);
     });
+    this.registerDomEvent(document, "keydown", this.activityHandler);
+    this.registerDomEvent(document, "mousedown", this.activityHandler);
+    this.registerDomEvent(document, "touchstart", this.activityHandler);
+    this.registerDomEvent(document, "wheel", this.activityHandler, { passive: true });
+    this.registerDomEvent(document, "visibilitychange", this.visibilityHandler);
+    this.registerEvent(this.app.workspace.on("editor-change", () => {
+      this.metrics.invalidate("word-count");
+    }));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", this.refreshTarget));
+    this.registerEvent(this.app.workspace.on("file-open", this.refreshTarget));
+    this.registerEvent(this.app.workspace.on("layout-change", this.refreshTarget));
+    const invalidateFiles = () => this.metrics.invalidate("word-count", "file-count", "global-word-count");
+    this.registerEvent(this.app.vault.on("create", invalidateFiles));
+    this.registerEvent(this.app.vault.on("delete", invalidateFiles));
+    this.registerEvent(this.app.vault.on("rename", invalidateFiles));
+    this.registerEvent(this.app.vault.on("modify", invalidateFiles));
     this.app.workspace.onLayoutReady(() => {
-      if (this.enabled)
-        this.start();
+      if (this.unloaded) return;
+      this.layoutReady = true;
+      this.syncPlaybackGate();
     });
   }
   onunload() {
+    this.unloaded = true;
     this.stop();
   }
+  async setEnabled(enabled) {
+    if (this.unloaded) return;
+    this.settings.enabled = enabled;
+    this.runtimeBlocked = false;
+    if (enabled) this.start();
+    else this.stop();
+    new import_obsidian2.Notice(enabled ? this.t("notice.enabled") : this.t("notice.disabled"));
+    await this.saveSettings();
+  }
   start() {
-    if (this.renderer)
-      return;
+    this.syncPlaybackGate();
+  }
+  isCurrent(renderer, generation) {
+    return !this.unloaded && this.settings.enabled && this.renderer === renderer && this.generation === generation;
+  }
+  async startInternal() {
+    const generation = ++this.generation;
     try {
-      this.startInternal();
-    } catch (e) {
-      console.error("BlackHole: failed to start.", e);
-      new import_obsidian2.Notice(this.t("notice.startFailed"));
-      this.stop();
-      this.enabled = false;
+      const canvas = document.createElement("canvas");
+      canvas.className = "blackhole-canvas hidden";
+      this.canvas = canvas;
+      document.body.appendChild(canvas);
+      const renderer = new BlackHoleRenderer(canvas, this.toShaderParams());
+      this.renderer = renderer;
+      renderer.onFatalError = (reason) => {
+        if (this.isCurrent(renderer, generation)) this.fail(reason);
+      };
+      const version = this.paramsVersion;
+      const initStart = performance.now();
+      const initialized = await renderer.init();
+      console.info(`BlackHole: renderer initialization ${(performance.now() - initStart).toFixed(1)}ms`);
+      if (!this.isCurrent(renderer, generation)) return;
+      if (!initialized || renderer.softwareRenderer) {
+        this.fail(renderer.softwareRenderer ? this.t("notice.softwareUnsupported") : renderer.lastError || this.t("notice.startFailed"));
+        return;
+      }
+      let compiledVersion = version;
+      while (compiledVersion !== this.paramsVersion) {
+        compiledVersion = this.paramsVersion;
+        const ok = await renderer.recompile(this.toShaderParams());
+        if (!this.isCurrent(renderer, generation)) return;
+        if (!ok) {
+          this.fail(renderer.lastError || this.t("notice.startFailed"));
+          return;
+        }
+      }
+      const lens = new BackdropLens(canvas.parentElement);
+      this.lens = lens;
+      lens.setTarget(this.findLensTarget());
+      renderer.onEffectFrame = (frame) => {
+        if (this.isCurrent(renderer, generation) && this.lens === lens) lens.update(frame);
+      };
+      this.ready = true;
+      renderer.sizeMode = this.settings.sizeMode;
+      renderer.lastActivity = this.lastActivity / 1e3;
+      this.updateMetric();
+      this.metricIntervalId = window.setInterval(() => {
+        if (!this.playbackSuspended && !document.hidden) this.updateMetric();
+      }, 1e3);
+      this.applyRuntimeSettings();
+    } catch (error) {
+      if (this.generation === generation && !this.unloaded) this.fail(String(error));
     }
   }
-  startInternal() {
-    const canvas = document.createElement("canvas");
-    canvas.className = "blackhole-canvas";
-    this.canvas = canvas;
-    const host = document.querySelector(".app-container") ?? document.body;
-    host.appendChild(canvas);
-    this.renderer = new BlackHoleRenderer(canvas, this.toShaderParams());
-    if (!this.renderer.init()) {
-      console.error("BlackHole: WebGL2 not available");
-      new import_obsidian2.Notice(this.t("notice.requireWebgl2"));
-      canvas.remove();
-      this.renderer = null;
-      this.canvas = null;
-      return;
-    }
-    const capture = new WorkspaceCapture();
-    capture.setElement(this.findCaptureTarget());
-    capture.onCapture = (canvas2) => {
-      if (this.capture !== capture || !this.renderer)
-        return;
-      this.renderer.updateTexture(canvas2);
-    };
-    this.capture = capture;
-    const blank = WorkspaceCapture.blankCanvas(window.innerWidth, window.innerHeight);
-    this.renderer.updateTexture(blank);
-    this.lastActivity = performance.now();
-    if (this.renderer.softwareRenderer && this.settings.renderScale >= 0.5) {
-      new import_obsidian2.Notice(this.t("notice.softwareReduced"));
-    }
-    this.applyRuntimeSettings();
-    this.capture.capture(performance.now());
-    this.renderer.sizeMode = this.settings.sizeMode;
-    this.renderer.lastActivity = this.lastActivity / 1e3;
-    this.renderer.tokenLevel = this.computeTokenLevel();
-    this.renderer.start();
-    this.syncPlaybackGate();
-    document.addEventListener("keydown", this.activityHandler);
-    document.addEventListener("mousedown", this.activityHandler);
-    document.addEventListener("touchstart", this.activityHandler);
-    document.addEventListener("wheel", this.activityHandler, { passive: true });
-    this.captureIntervalId = window.setInterval(() => {
-      try {
-        if (!this.renderer || !this.capture || this.playbackSuspended)
-          return;
-        this.capture.capture(performance.now());
-      } catch (e) {
-        console.error("BlackHole: capture tick failed.", e);
-      }
-    }, 1e3);
-    this.metricIntervalId = window.setInterval(() => {
-      try {
-        if (!this.renderer || this.settings.sizeMode !== 1 || this.playbackSuspended)
-          return;
-        this.renderer.tokenLevel = this.computeTokenLevel();
-      } catch (e) {
-        console.error("BlackHole: metric tick failed.", e);
-      }
-    }, 1e3);
-    const refresh = () => {
-      try {
-        this.capture?.setElement(this.findCaptureTarget());
-        this.capture?.requestSoon();
-      } catch (e) {
-        console.error("BlackHole: capture-target refresh failed.", e);
-      }
-    };
-    this.leafChangeRef = this.app.workspace.on("active-leaf-change", refresh);
-    this.layoutChangeRef = this.app.workspace.on("layout-change", refresh);
-    document.addEventListener("scroll", this.scrollHandler, { capture: true, passive: true });
+  fail(reason) {
+    console.error("BlackHole:", reason);
+    this.runtimeBlocked = true;
+    this.stop();
+    new import_obsidian2.Notice(reason || this.t("notice.startFailed"));
   }
   stop() {
-    if (this.renderer) {
-      this.renderer.destroy();
-      this.renderer = null;
-    }
-    this.capture = null;
-    if (this.canvas) {
-      this.canvas.remove();
-      this.canvas = null;
-    }
-    window.clearInterval(this.captureIntervalId);
+    ++this.generation;
     window.clearInterval(this.metricIntervalId);
     window.clearTimeout(this.idleResumeTimeoutId);
-    this.captureIntervalId = 0;
-    this.metricIntervalId = 0;
-    this.idleResumeTimeoutId = 0;
-    this.playbackSuspended = false;
-    document.removeEventListener("keydown", this.activityHandler);
-    document.removeEventListener("mousedown", this.activityHandler);
-    document.removeEventListener("touchstart", this.activityHandler);
-    document.removeEventListener("wheel", this.activityHandler);
-    document.removeEventListener("scroll", this.scrollHandler, { capture: true });
-    if (this.leafChangeRef) {
-      this.app.workspace.offref(this.leafChangeRef);
-      this.leafChangeRef = null;
-    }
-    if (this.layoutChangeRef) {
-      this.app.workspace.offref(this.layoutChangeRef);
-      this.layoutChangeRef = null;
+    window.clearTimeout(this.recompileTimeoutId);
+    this.metricIntervalId = this.idleResumeTimeoutId = 0;
+    this.recompileTimeoutId = 0;
+    const renderer = this.renderer;
+    const lens = this.lens;
+    this.renderer = null;
+    this.lens = null;
+    this.ready = false;
+    this.compiling = false;
+    this.playbackSuspended = true;
+    this.metrics.clear();
+    try {
+      lens?.destroy();
+    } finally {
+      try {
+        renderer?.destroy();
+      } finally {
+        this.canvas?.remove();
+        this.canvas = null;
+      }
     }
   }
   onModeChange() {
-    if (!this.renderer)
-      return;
+    if (!this.renderer) return;
     this.renderer.sizeMode = this.settings.sizeMode;
-    this.renderer.tokenLevel = this.computeTokenLevel();
-    this.capture?.reset();
+    this.updateMetric();
   }
-  /**
-   * Tunable params are baked into the shader as compile-time consts, so changing
-   * one requires a recompile. Debounced so dragging a slider doesn't recompile
-   * the shader on every tick — only ~once the user pauses.
-   */
   onParamsChange() {
-    this.recompileSoon();
+    this.settings = normalizeSettings(this.settings);
+    ++this.paramsVersion;
+    window.clearTimeout(this.recompileTimeoutId);
+    if (!this.renderer || !this.ready || this.unloaded) return;
+    const generation = this.generation;
+    this.recompileTimeoutId = window.setTimeout(() => {
+      this.recompileTimeoutId = 0;
+      if (generation === this.generation) void this.recompile();
+    }, 200);
   }
-  /** Apply non-shader runtime settings (render scale, capture cadence). */
-  applyRuntimeSettings() {
-    if (this.renderer) {
-      this.renderer.captureEnabled = this.settings.captureEnabled;
-      const effectiveScale = this.renderer.softwareRenderer ? Math.min(this.settings.renderScale, MAX_RENDER_SCALE_SOFTWARE) : Math.min(this.settings.renderScale, MAX_RENDER_SCALE);
-      this.renderer.setRenderScale(effectiveScale);
-    }
-    this.capture?.setOptions({
-      enabled: this.settings.captureEnabled,
-      intervalMs: Math.max(this.settings.captureIntervalMs, 2500)
-    });
+  async recompile() {
+    const renderer = this.renderer;
+    if (!renderer || !this.ready || this.compiling) return;
+    const generation = this.generation;
+    this.compiling = true;
     this.syncPlaybackGate();
+    try {
+      let version;
+      do {
+        version = this.paramsVersion;
+        const ok = await renderer.recompile(this.toShaderParams());
+        if (!this.isCurrent(renderer, generation)) return;
+        if (!ok) {
+          this.fail(renderer.lastError || this.t("notice.startFailed"));
+          return;
+        }
+      } while (version !== this.paramsVersion);
+    } catch (error) {
+      if (this.isCurrent(renderer, generation)) this.fail(String(error));
+    } finally {
+      if (this.isCurrent(renderer, generation)) {
+        this.compiling = false;
+        this.syncPlaybackGate();
+      }
+    }
+  }
+  applyRuntimeSettings() {
+    if (this.renderer && this.ready) {
+      this.renderer.captureEnabled = false;
+      this.renderer.setRenderScale(runtimeRenderScale(this.settings));
+    }
+    this.lens?.setEnabled(this.settings.captureEnabled);
+    this.lens?.setTarget(this.findLensTarget());
+    if (this.settings.captureEnabled && this.lens && !this.lens.supported && !this.lensUnsupportedNotified) {
+      this.lensUnsupportedNotified = true;
+      new import_obsidian2.Notice(this.t("notice.lensUnsupported"));
+    }
+    this.syncPlaybackGate();
+  }
+  /** The only path allowed to start rendering or resume the lens. */
+  syncPlaybackGate() {
+    window.clearTimeout(this.idleResumeTimeoutId);
+    this.idleResumeTimeoutId = 0;
+    const eligible = !this.unloaded && this.layoutReady && this.settings.enabled && !this.runtimeBlocked && !document.hidden;
+    const remaining = this.settings.idlePlaybackEnabled ? this.settings.idlePlaybackDelaySec * 1e3 - (performance.now() - this.lastActivity) : 0;
+    if (eligible && remaining > 0) {
+      const generation = this.generation;
+      this.idleResumeTimeoutId = window.setTimeout(() => {
+        this.idleResumeTimeoutId = 0;
+        if (generation === this.generation) this.syncPlaybackGate();
+      }, remaining);
+    }
+    const allowed = eligible && remaining <= 0;
+    if (allowed && !this.renderer) {
+      void this.startInternal();
+      return;
+    }
+    const suspended = !allowed || !this.ready || this.compiling;
+    this.canvas?.classList.toggle("hidden", suspended);
+    this.lens?.setSuspended(suspended);
+    if (!this.renderer || !this.ready) return;
+    if (suspended) this.renderer.stop();
+    else if (this.playbackSuspended) {
+      this.updateMetric();
+      this.renderer.start();
+    }
+    this.playbackSuspended = suspended;
+  }
+  updateMetric() {
+    if (!this.renderer) return;
+    try {
+      this.renderer.tokenLevel = this.metrics.level(this.settings, performance.now());
+    } catch (error) {
+      this.renderer.tokenLevel = -1;
+      console.error("BlackHole: token metric failed.", error);
+    }
+  }
+  async resetSettings() {
+    if (this.unloaded) return;
+    this.stop();
+    this.settings = resetEffectSettings(this.settings);
+    this.runtimeBlocked = false;
+    this.lastActivity = performance.now();
+    this.syncPlaybackGate();
+    await this.saveSettings();
   }
   async saveSettings() {
     await this.saveData(this.settings);
   }
   async loadSettings() {
-    const data = await this.loadData();
-    if (data)
-      this.settings = { ...DEFAULT_SETTINGS, ...data };
-    const changed = this.normalizeSettings();
-    if (changed)
-      await this.saveSettings();
+    this.settings = normalizeSettings(await this.loadData());
   }
   t(key) {
     return t(this.settings.language, key);
   }
   toShaderParams() {
+    const minArea = this.settings.tokenAreaMin;
     return {
-      holeRadius: Math.min(this.settings.holeRadius, MAX_HOLE_RADIUS),
+      holeRadius: this.settings.holeRadius,
       lensDepth: this.settings.lensDepth,
       starGain: this.settings.starGain,
       diskInner: this.settings.diskInner,
-      diskOuter: Math.min(this.settings.diskOuter, MAX_DISK_OUTER),
+      diskOuter: this.settings.diskOuter,
       diskIncl: this.settings.diskIncl,
       diskRoll: this.settings.diskRoll,
       diskGain: this.settings.diskGain,
@@ -2572,15 +1990,15 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
       driftSpeed: this.settings.driftSpeed,
       workArea: this.settings.workArea,
       dilationMin: this.settings.dilationMin,
-      tokenAreaMin: Math.min(this.settings.tokenAreaMin, MAX_TOKEN_AREA_MIN),
-      tokenAreaMax: Math.min(this.settings.tokenAreaMax, MAX_TOKEN_AREA_MAX),
+      tokenAreaMin: minArea,
+      tokenAreaMax: Math.max(minArea, this.settings.tokenAreaMax),
       tokenHomeX: this.settings.tokenHomeX,
       tokenHomeY: this.settings.tokenHomeY,
       tokenEase: this.settings.tokenEase,
       tokenReach: this.settings.tokenReach,
       tokenCalm: this.settings.tokenCalm,
       tokenRush: this.settings.tokenRush,
-      nSteps: Math.min(this.settings.nSteps, MAX_SHADER_STEPS),
+      nSteps: this.settings.nSteps,
       workPeriodMin: this.settings.workPeriodMin,
       breakMin: this.settings.breakMin,
       idleFadeSec: this.settings.idleFadeSec,
@@ -2589,99 +2007,8 @@ var BlackHolePlugin = class extends import_obsidian2.Plugin {
       tokenGlideRate: 10
     };
   }
-  normalizeSettings() {
-    const before = JSON.stringify(this.settings);
-    this.settings.holeRadius = Math.min(this.settings.holeRadius, MAX_HOLE_RADIUS);
-    this.settings.tokenAreaMin = Math.min(this.settings.tokenAreaMin, MAX_TOKEN_AREA_MIN);
-    this.settings.tokenAreaMax = Math.min(this.settings.tokenAreaMax, MAX_TOKEN_AREA_MAX);
-    this.settings.diskOuter = Math.min(this.settings.diskOuter, MAX_DISK_OUTER);
-    this.settings.nSteps = Math.min(this.settings.nSteps, MAX_SHADER_STEPS);
-    this.settings.renderScale = Math.min(this.settings.renderScale, MAX_RENDER_SCALE);
-    this.settings.captureIntervalMs = Math.max(this.settings.captureIntervalMs, 2500);
-    this.settings.idlePlaybackDelaySec = Math.max(this.settings.idlePlaybackDelaySec, 5);
-    return JSON.stringify(this.settings) !== before;
-  }
-  scheduleIdleResume() {
-    window.clearTimeout(this.idleResumeTimeoutId);
-    if (!this.settings.idlePlaybackEnabled)
-      return;
-    const delayMs = this.settings.idlePlaybackDelaySec * 1e3;
-    this.idleResumeTimeoutId = window.setTimeout(() => {
-      const idleFor = performance.now() - this.lastActivity;
-      if (idleFor >= delayMs)
-        this.setPlaybackSuspended(false);
-    }, delayMs);
-  }
-  syncPlaybackGate() {
-    if (!this.renderer)
-      return;
-    if (!this.settings.idlePlaybackEnabled) {
-      window.clearTimeout(this.idleResumeTimeoutId);
-      this.setPlaybackSuspended(false);
-      return;
-    }
-    const delayMs = this.settings.idlePlaybackDelaySec * 1e3;
-    const idleFor = performance.now() - this.lastActivity;
-    if (idleFor >= delayMs)
-      this.setPlaybackSuspended(false);
-    else {
-      this.setPlaybackSuspended(true);
-      this.scheduleIdleResume();
-    }
-  }
-  setPlaybackSuspended(suspended) {
-    if (this.playbackSuspended === suspended)
-      return;
-    this.playbackSuspended = suspended;
-    this.canvas?.classList.toggle("hidden", suspended);
-    if (!this.renderer)
-      return;
-    if (suspended) {
-      this.renderer.stop();
-      return;
-    }
-    this.capture?.requestSoon();
-    this.renderer.start();
-  }
-  computeTokenLevel() {
-    if (this.settings.sizeMode !== 1)
-      return -1;
-    try {
-      switch (this.settings.tokenMetric) {
-        case "word-count": {
-          const mdView = this.app.workspace.getActiveViewOfType(import_obsidian2.MarkdownView);
-          if (!mdView)
-            return -1;
-          const text = mdView.editor?.getValue() ?? "";
-          const words = text.match(/\S+/g)?.length ?? 0;
-          return Math.min(words / this.settings.maxWordCount, 1);
-        }
-        case "global-word-count": {
-          const files = this.app.vault.getMarkdownFiles();
-          return Math.min(files.length * 500 / this.settings.maxWordCount, 1);
-        }
-        case "file-count": {
-          const files = this.app.vault.getMarkdownFiles();
-          return Math.min(files.length / 1e3, 1);
-        }
-        case "tab-count": {
-          const leaves = this.app.workspace.getLeavesOfType("markdown");
-          return Math.min(leaves.length / 20, 1);
-        }
-        default:
-          return -1;
-      }
-    } catch (e) {
-      console.error("BlackHole: token-metric computation failed.", e);
-      return -1;
-    }
-  }
-  findCaptureTarget() {
-    return document.querySelector(".app-container") ?? document.querySelector(".workspace") ?? document.body;
+  findLensTarget() {
+    const view = this.app.workspace.getActiveViewOfType(import_obsidian2.MarkdownView);
+    return view?.contentEl ?? null;
   }
 };
-/*! Bundled license information:
-
-dom-to-image-more/dist/dom-to-image-more.min.js:
-  (*! dom-to-image-more v3.10.0 2026-06-12 05:29:50 UTC *)
-*/
